@@ -37,7 +37,7 @@ it.each([false, true])('settles startup after parent IPC disconnect (boot failur
   writeFileSync(join(modules, 'dsh', 'profile-boot.js'), `
     import { writeFileSync } from 'node:fs';
     export function runProfile(options) {
-      process.send({ type: 'booting', packageManager: options.packageManager });
+      process.send({ type: 'booting', args: options.args, packageManager: options.packageManager });
       return new Promise((resolve, reject) => process.once('disconnect', () => {
         if (${String(fail)}) { reject(new Error('fixture boot failure')); return; }
         resolve({ ctx: { plugin: async () => {}, effect: () => {}, on: () => {}, inject: () => {},
@@ -62,12 +62,14 @@ it.each([false, true])('settles startup after parent IPC disconnect (boot failur
   })
   try {
     const boot = await new Promise<{
+      args: string[]
       packageManager: { command: string; args: string[]; env: Record<string, string> }
     }>((resolve, reject) => {
       child.once('message', resolve)
       child.once('error', reject)
       child.once('exit', (code) => { reject(new Error(`Host exited before booting: ${String(code)} ${stderr}`)) })
     })
+    expect(boot.args).toEqual(['--no-open', '--port', '0'])
     expect(boot.packageManager.command).toBe(process.execPath)
     expect(boot.packageManager.args).toEqual(['--expose-internals', pnpm])
     expect(boot.packageManager.env.ELECTRON_RUN_AS_NODE).toBe('1')
