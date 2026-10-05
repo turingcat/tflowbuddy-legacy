@@ -38,6 +38,24 @@ const vendoredPackages = new Set([
   '@deepseek-ai/cordis-plugin-hmr',
   '@deepseek-ai/cordis-plugin-logger-console',
 ])
+/**
+ * The one vendored package that is not rescoped into `@deepseek-ai/*`: the
+ * GPL-2.0 mobile companion keeps its upstream identity, repository, and
+ * release metadata (vendor/README.md). The pair is exact — neither the name
+ * at another directory nor another name at this directory is admitted.
+ */
+const GPL_VENDOR_DIRECTORY = 'vendor/dsh-pocket'
+const GPL_VENDOR_NAME = 'dsh-pocket'
+/**
+ * Peer ranges the GPL vendor's upstream manifest declares verbatim. Only the
+ * exact recorded pairs are exempt from workspace-range rules; any other range
+ * in that manifest is checked like any other workspace reference.
+ */
+const GPL_VENDOR_UPSTREAM_RANGES: Readonly<Record<string, readonly string[]>> = {
+  peerDependencies: ['@deepseek-ai/cordis'],
+}
+/** Upstream's published peer range for `@deepseek-ai/cordis`. */
+const GPL_VENDOR_UPSTREAM_PEER_RANGE = '^4.0.1'
 const publicNativePackages = new Set([
   '@deepseek-ai/node-addon-system',
   '@deepseek-ai/node-addon-system-darwin-arm64',
@@ -393,6 +411,13 @@ export function checkWorkspaceManifest({ dir, manifest }: WorkspaceManifest): st
   const label = manifest.name ?? dir
   const familyVersionError = checkDshFamilyVersion(manifest, repositoryVersion)
   if (familyVersionError !== undefined) errors.push(familyVersionError)
+  // The direct GPL vendor keeps its upstream manifest: unscoped name, upstream
+  // repository, upstream publish metadata. Only the exact recorded pair is a
+  // release member of this kind; everything else falls through to the
+  // @deepseek-ai release-member rules.
+  if (dir === GPL_VENDOR_DIRECTORY && manifest.name === GPL_VENDOR_NAME) {
+    return errors.map(error => `${relative(root, join(root, dir, 'package.json'))}: ${error}`)
+  }
   const isNativePackageDir = dir.startsWith('native/system/packages/')
   const isPublicNativePackage = isNativePackageDir
     && manifest.name !== undefined
@@ -582,17 +607,37 @@ export function checkExperimentalDependencyIsolation(
  */
 export function checkWorkspaceProtocol(manifests: readonly WorkspaceManifest[]): string[] {
   const members = new Set(manifests.map(entry => entry.manifest.name).filter(name => name !== undefined))
-  const vendors = new Set(manifests.filter(entry => entry.dir.startsWith('vendor/')
-    || entry.dir === 'native/system' || entry.dir.startsWith('native/system/packages/')).map(entry => entry.manifest.name))
+  const vendors = new Set(manifests.filter((entry) => {
+    if (entry.dir === 'native/system' || entry.dir.startsWith('native/system/packages/')) return true
+    if (!entry.dir.startsWith('vendor/')) return false
+    // Vendor membership requires the rescoped identity; the exact unscoped
+    // GPL pair is the single documented exception.
+    return entry.manifest.name?.startsWith('@deepseek-ai/') === true
+      || (entry.dir === GPL_VENDOR_DIRECTORY && entry.manifest.name === GPL_VENDOR_NAME)
+  }).map(entry => entry.manifest.name))
   const errors: string[] = []
   for (const { dir, manifest } of manifests) {
+    // The GPL vendor's own manifest is verbatim upstream except its local
+    // devDependency link (vendor/README.md); the exact upstream peer range it
+    // publishes stays under upstream's control and is exempt from
+    // workspace-range rules.
+    const isGplVendor = dir === GPL_VENDOR_DIRECTORY && manifest.name === GPL_VENDOR_NAME
     for (const section of dependencySections) {
       for (const [name, range] of Object.entries(manifest[section] ?? {})) {
         if (!members.has(name)) continue
+        if (isGplVendor && range === GPL_VENDOR_UPSTREAM_PEER_RANGE
+          && GPL_VENDOR_UPSTREAM_RANGES[section]?.includes(name) === true) continue
         const expected = name === '@deepseek-ai/dsh' || name.startsWith('@deepseek-ai/dsh-')
           ? 'workspace:*'
           : vendors.has(name) ? 'workspace:~' : undefined
-        if (expected !== undefined ? range === expected : range.startsWith('workspace:')) continue
+        // An unscoped package under vendor/ outside the exact GPL pair is not
+        // a release member (scripts/release/families.ts rejects it), so a
+        // workspace range pointing at it is rejected rather than silently
+        // accepted as a non-vendor protocol use.
+        const unscopedVendor = manifests.some(entry => entry.manifest.name === name
+          && entry.dir.startsWith('vendor/')
+          && !(entry.dir === GPL_VENDOR_DIRECTORY && entry.manifest.name === GPL_VENDOR_NAME))
+        if (expected !== undefined ? range === expected : range.startsWith('workspace:') && !unscopedVendor) continue
         errors.push(`${manifest.name ?? dir}: ${section}.${name} must use ${expected ?? 'the workspace: protocol'}, got ${range}`)
       }
     }

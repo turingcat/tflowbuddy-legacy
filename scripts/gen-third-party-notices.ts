@@ -89,6 +89,8 @@ const OVERRIDES: Record<string, { license?: string; repo?: string }> = {
   // No repository field in the published manifest.
   'node-addon-require-builtin': { repo: 'https://www.npmjs.com/package/node-addon-require-builtin' },
   // No `license` field in the published manifest; the tarball's LICENSE.txt is the MIT text.
+  // Legacy `licenses: [{ type: 'Apache 2.0' }]` array instead of a scalar `license` field.
+  'qrcode-terminal': { license: 'Apache-2.0' },
 }
 
 /**
@@ -444,6 +446,24 @@ export interface VendoredRow {
 }
 
 /**
+ * The one vendored package outside the MIT rescope: the GPL-2.0 mobile
+ * companion keeps its upstream identity, license, and prebuilt artifacts
+ * (vendor/README.md). It is disclosed in its own section rather than folded
+ * into the MIT table or the permissive-license runtime assertion. The pair is
+ * exact — neither the name at another directory nor another name at this
+ * directory is treated this way.
+ */
+const GPL_VENDOR = { directory: 'vendor/dsh-pocket', name: 'dsh-pocket' } as const
+
+/** A vendored row joined to its on-disk directory, declared license, and direct npm dependencies. */
+export interface VendoredPackage extends VendoredRow {
+  sourceDirectory: string
+  license: string
+  /** Direct runtime dependencies declared by the vendored manifest. */
+  dependencies: { name: string; license: string; repo: string }[]
+}
+
+/**
  * Parse the vendored-package manifest table out of `vendor/README.md`.
  * @param text - the complete `vendor/README.md` contents.
  * @returns one row per manifest-table entry, in table order.
@@ -463,16 +483,31 @@ export function parseVendoredRows(text: string): VendoredRow[] {
 
 /**
  * Parse the vendored manifest table and confirm it accounts for every vendored
- * directory. The `vendor/` tree — not the table — is the set that must be
+ * directory, split between the MIT rescoped set and the one documented GPL
+ * package. The `vendor/` tree — not the table — is the set that must be
  * disclosed, so a row that stops matching the table format is a hard error
  * rather than a package that quietly vanishes from the notices.
+ * @param repositoryRoot - repository or fixture root containing `vendor/`.
+ * @param readme - the complete `vendor/README.md` contents; defaults to the
+ *   committed file under `repositoryRoot`.
+ * @param manifests - workspace manifests already loaded by the caller, used to
+ *   resolve dependency metadata; loaded here when omitted.
+ * @returns MIT rows for the shared vendored table and the GPL rows disclosed
+ *   in their own section.
  */
-function collectVendored(): (VendoredRow & { sourceDirectory: string })[] {
-  const rows = parseVendoredRows(readFileSync(resolve(root, 'vendor/README.md'), 'utf8'))
+export function collectVendored(
+  repositoryRoot: string,
+  readme?: string,
+  manifests?: Map<string, Manifest>,
+): { mit: VendoredPackage[]; gpl: VendoredPackage[] } {
+  const text = readme ?? readFileSync(resolve(repositoryRoot, 'vendor/README.md'), 'utf8')
+  const rows = parseVendoredRows(text)
+  const installed = manifests ?? loadWorkspaceManifests().manifests
   const onDisk = new Map<string, string>()
-  for (const entry of readdirSync(resolve(root, 'vendor'), { withFileTypes: true })) {
+  const vendorRoot = resolve(repositoryRoot, 'vendor')
+  for (const entry of readdirSync(vendorRoot, { withFileTypes: true })) {
     if (!entry.isDirectory()) continue
-    const manifest = readManifest(`vendor/${entry.name}/package.json`)
+    const manifest = JSON.parse(readFileSync(resolve(vendorRoot, entry.name, 'package.json'), 'utf8')) as Manifest
     if (manifest.name !== undefined) onDisk.set(manifest.name, entry.name)
   }
 
@@ -481,15 +516,33 @@ function collectVendored(): (VendoredRow & { sourceDirectory: string })[] {
   if (missing.length > 0) {
     throw new Error(`gen-third-party-notices: vendor/README.md has no manifest-table row for ${missing.join(', ')}; its table format changed or the sync is incomplete.`)
   }
-  return rows.map((row) => {
+  const mit: VendoredPackage[] = []
+  const gpl: VendoredPackage[] = []
+  for (const row of rows) {
     const dir = onDisk.get(row.npmName)
     if (dir === undefined) throw new Error(`gen-third-party-notices: vendored package ${row.npmName} from vendor/README.md has no vendor/ directory.`)
-    const license = readManifest(`vendor/${dir}/package.json`).license
+    const manifest = JSON.parse(readFileSync(resolve(vendorRoot, dir, 'package.json'), 'utf8')) as Manifest
+    const license = manifest.license
+    const entry: VendoredPackage = {
+      ...row,
+      sourceDirectory: `vendor/${dir}`,
+      license: license ?? '',
+      dependencies: Object.keys(manifest.dependencies ?? {}).sort()
+        .map(name => ({ name, ...installedMetadata(name, installed) })),
+    }
+    if (dir === GPL_VENDOR.directory.replace('vendor/', '') && row.npmName === GPL_VENDOR.name) {
+      if (license !== 'GPL-2.0') {
+        throw new Error(`gen-third-party-notices: vendored ${row.npmName} declares license ${JSON.stringify(license)}; the GPL section records GPL-2.0.`)
+      }
+      gpl.push(entry)
+      continue
+    }
     if (license !== 'MIT') {
       throw new Error(`gen-third-party-notices: vendored ${row.npmName} declares license ${JSON.stringify(license)}; the vendored section assumes MIT throughout.`)
     }
-    return { ...row, sourceDirectory: `vendor/${dir}` }
-  })
+    mit.push(entry)
+  }
+  return { mit, gpl }
 }
 
 /** Whether a parsed TOML value is a table rather than an array or scalar. */
@@ -754,7 +807,7 @@ export async function render(): Promise<string> {
   const runtimeDeps = npm.filter(dep => dep.runtime)
   const devDeps = npm.filter(dep => !dep.runtime)
   const kitRuntime = runtimeDeps.some(dep => dep.name === LIBREOFFICE_KIT_PACKAGE)
-  const vendored = collectVendored()
+  const vendored = collectVendored(root, undefined, manifests)
   const python = collectPython()
   const bundledPython = collectBundledPythonDependencies(primaryRuntimeLock.pythonPackages)
   const patched = collectPatched()
@@ -781,11 +834,25 @@ The complete npm transitive closure, including the Landlock launcher workspace, 
 
 ## Vendored source (\`vendor/\`)
 
-The Cordis framework and its foundation libraries are source-vendored into this repository rather than consumed from npm, and republished under the \`@deepseek-ai\` scope. All are MIT-licensed; each directory preserves its upstream \`LICENSE\` file. Exact upstream commits and local modifications are recorded in [\`vendor/README.md\`](vendor/README.md).
+The Cordis framework and its foundation libraries are source-vendored into this repository rather than consumed from npm, and republished under the \`@deepseek-ai\` scope. Those framework packages are MIT-licensed; each directory preserves its upstream \`LICENSE\` file. Exact upstream commits and local modifications are recorded in [\`vendor/README.md\`](vendor/README.md).
 
 | Package | Upstream name | Source | License |
 | --- | --- | --- | --- |
-${vendored.map(row => `| \`${row.npmName}\` | \`${row.upstreamName}\` | [${row.sourceDirectory}](${row.sourceDirectory}/) | MIT |`).join('\n')}
+${vendored.mit.map(row => `| \`${row.npmName}\` | \`${row.upstreamName}\` | [${row.sourceDirectory}](${row.sourceDirectory}/) | MIT |`).join('\n')}
+
+## GPL vendored source
+
+One vendored package is not part of the MIT set: [\`dsh-pocket\`](https://github.com/shaobeichen/dsh-pocket), the mobile companion, is vendored verbatim from its upstream release under GPL-2.0 and keeps its unscoped name, source layout, license, and prebuilt browser client. Its GPL-2.0 terms are recorded at [\`vendor/dsh-pocket/LICENSE\`](vendor/dsh-pocket/LICENSE); the bundled mobile UI retains its own MIT notice at [\`vendor/dsh-pocket/client/mobile/LICENSE.dsh-web-mobile\`](vendor/dsh-pocket/client/mobile/LICENSE.dsh-web-mobile). This disclosure names the component and its direct runtime dependencies without relicensing it or any other package.
+
+| Package | Upstream name | Source | Repository | License |
+| --- | --- | --- | --- | --- |
+${vendored.gpl.map(row => `| \`${row.npmName}\` | \`${row.upstreamName}\` | [${row.sourceDirectory}](${row.sourceDirectory}/) | [upstream](${row.upstream}) | ${row.license} |`).join('\n')}
+
+Direct runtime dependencies of the GPL vendored package:
+
+| Package | License |
+| --- | --- |
+${vendored.gpl.flatMap(row => row.dependencies).map(dep => `| [\`${dep.name}\`](${dep.repo}) | ${dep.license} |`).join('\n')}
 
 ## Runtime npm dependencies
 

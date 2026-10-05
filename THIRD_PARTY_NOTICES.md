@@ -11,7 +11,7 @@ The complete npm transitive closure, including the Landlock launcher workspace, 
 
 ## Vendored source (`vendor/`)
 
-The Cordis framework and its foundation libraries are source-vendored into this repository rather than consumed from npm, and republished under the `@deepseek-ai` scope. All are MIT-licensed; each directory preserves its upstream `LICENSE` file. Exact upstream commits and local modifications are recorded in [`vendor/README.md`](vendor/README.md).
+The Cordis framework and its foundation libraries are source-vendored into this repository rather than consumed from npm, and republished under the `@deepseek-ai` scope. Those framework packages are MIT-licensed; each directory preserves its upstream `LICENSE` file. Exact upstream commits and local modifications are recorded in [`vendor/README.md`](vendor/README.md).
 
 | Package | Upstream name | Source | License |
 | --- | --- | --- | --- |
@@ -24,6 +24,21 @@ The Cordis framework and its foundation libraries are source-vendored into this 
 | `@deepseek-ai/cordis-plugin-timer` | `@cordisjs/plugin-timer` | [vendor/timer](vendor/timer/) | MIT |
 | `@deepseek-ai/cordis-plugin-hmr` | `@cordisjs/plugin-hmr` | [vendor/hmr](vendor/hmr/) | MIT |
 | `@deepseek-ai/cordis-plugin-logger-console` | `@cordisjs/plugin-logger-console` | [vendor/logger-console](vendor/logger-console/) | MIT |
+
+## GPL vendored source
+
+One vendored package is not part of the MIT set: [`dsh-pocket`](https://github.com/shaobeichen/dsh-pocket), the mobile companion, is vendored verbatim from its upstream release under GPL-2.0 and keeps its unscoped name, source layout, license, and prebuilt browser client. Its GPL-2.0 terms are recorded at [`vendor/dsh-pocket/LICENSE`](vendor/dsh-pocket/LICENSE); the bundled mobile UI retains its own MIT notice at [`vendor/dsh-pocket/client/mobile/LICENSE.dsh-web-mobile`](vendor/dsh-pocket/client/mobile/LICENSE.dsh-web-mobile). This disclosure names the component and its direct runtime dependencies without relicensing it or any other package.
+
+| Package | Upstream name | Source | Repository | License |
+| --- | --- | --- | --- | --- |
+| `dsh-pocket` | `dsh-pocket` | [vendor/dsh-pocket](vendor/dsh-pocket/) | [upstream](https://github.com/shaobeichen/dsh-pocket) | GPL-2.0 |
+
+Direct runtime dependencies of the GPL vendored package:
+
+| Package | License |
+| --- | --- |
+| [`qrcode`](https://github.com/soldair/node-qrcode) | MIT |
+| [`qrcode-terminal`](https://github.com/gtanner/qrcode-terminal) | Apache-2.0 |
 
 ## Runtime npm dependencies
 
@@ -117,6 +132,8 @@ External packages installed for runtime use or distributed inside the prebuilt b
 | [`papaparse`](https://github.com/mholt/PapaParse) | MIT |
 | [`pdfjs-dist`](https://github.com/mozilla/pdf.js) | Apache-2.0 |
 | [`picomatch`](https://github.com/micromatch/picomatch) | MIT |
+| [`qrcode`](https://github.com/soldair/node-qrcode) | MIT |
+| [`qrcode-terminal`](https://github.com/gtanner/qrcode-terminal) | Apache-2.0 |
 | [`react`](https://github.com/facebook/react) | MIT |
 | [`react-dom`](https://github.com/facebook/react) | MIT |
 | [`readable-stream`](https://github.com/nodejs/readable-stream) | MIT |

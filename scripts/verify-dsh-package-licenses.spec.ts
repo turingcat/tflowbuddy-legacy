@@ -39,6 +39,7 @@ describe('DSH package license gate', () => {
       name: '@deepseek-ai/cordis',
       license: 'BSD-3-Clause',
     })
+    writeManifest(root, 'vendor/dsh-pocket/package.json', { name: 'dsh-pocket', license: 'GPL-2.0' })
 
     expect(inspectDshPackageLicenses(root)).toEqual({
       packageCount: 3,

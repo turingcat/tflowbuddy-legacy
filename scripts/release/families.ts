@@ -36,6 +36,14 @@ const PEER_SECTIONS = ['peerDependencies'] as const
 /** The workspace root manifest, which is never a release member. */
 const WORKSPACE_ROOT_PACKAGE = '@deepseek-ai/dsh-root'
 
+/**
+ * The one unscoped release member: the GPL-2.0 mobile companion keeps its
+ * upstream identity and publishes outside the `@deepseek-ai` scope
+ * (vendor/README.md). The pair is exact — neither the name at another
+ * directory nor another name at this directory is admitted.
+ */
+const UNSCOPED_VENDOR_MEMBER = { directory: 'vendor/dsh-pocket', name: 'dsh-pocket' } as const
+
 /** One peer declaration the publish order leaves unordered. */
 interface DroppedPeerEdge {
   readonly consumer: string
@@ -132,7 +140,11 @@ export abstract class ReleaseFamily {
       const name = requireString(manifest, 'name', normalized)
       const version = requireString(manifest, 'version', normalized)
       if (name === WORKSPACE_ROOT_PACKAGE) throw new Error(`${normalized} selected the workspace root`)
-      if (!name.startsWith('@deepseek-ai/')) throw new Error(`${normalized} must name an @deepseek-ai package`)
+      if (!name.startsWith('@deepseek-ai/')
+        && !(this.id === 'vendor' && name === UNSCOPED_VENDOR_MEMBER.name
+          && normalized === `${UNSCOPED_VENDOR_MEMBER.directory}/package.json`)) {
+        throw new Error(`${normalized} must name an @deepseek-ai package`)
+      }
       if (seen.has(name)) throw new Error(`${name} appears twice in release family ${this.id}`)
       seen.add(name)
       members.push({

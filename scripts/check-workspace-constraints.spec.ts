@@ -27,6 +27,32 @@ const experimental = {
   },
 } satisfies WorkspaceManifest
 
+describe('direct GPL vendor metadata', () => {
+  const manifest = JSON.parse(readFileSync(new URL('../vendor/dsh-pocket/package.json', import.meta.url), 'utf8')) as WorkspaceManifest['manifest']
+
+  it('accepts only the upstream dsh-pocket identity at its recorded directory', () => {
+    expect(checkWorkspaceManifest({ dir: 'vendor/dsh-pocket', manifest })).toEqual([])
+    for (const [dir, name] of [['vendor/other', 'dsh-pocket'], ['vendor/dsh-pocket', 'other'], ['vendor/other', 'other']]) {
+      expect(checkWorkspaceManifest({ dir: dir!, manifest: { ...manifest, name: name! } })).not.toEqual([])
+    }
+  })
+
+  it('preserves the upstream Cordis peer while requiring tilde workspace links elsewhere', () => {
+    const pocket = { dir: 'vendor/dsh-pocket', manifest }
+    const cordis = { dir: 'vendor/cordis', manifest: { name: '@deepseek-ai/cordis' } }
+    expect(checkWorkspaceProtocol([pocket, cordis])).toEqual([])
+    for (const range of ['workspace:*', '^2.10.6']) {
+      expect(checkWorkspaceProtocol([pocket, {
+        dir: 'apps/desktop', manifest: { name: 'consumer', dependencies: { 'dsh-pocket': range } },
+      }])).toEqual([`consumer: dependencies.dsh-pocket must use workspace:~, got ${range}`])
+    }
+    for (const [dir, name] of [['vendor/other', 'dsh-pocket'], ['vendor/dsh-pocket', 'other']]) {
+      expect(checkWorkspaceProtocol([{ dir: dir!, manifest: { ...manifest, name: name! } }, cordis])).not.toEqual([])
+    }
+    expect(checkWorkspaceProtocol([{ ...pocket, manifest: { ...manifest, peerDependencies: { '@deepseek-ai/cordis': '^4.0.2' } } }, cordis])).not.toEqual([])
+  })
+})
+
 describe('workspace dependency ranges', () => {
   const dependency = { dir: 'packages/core/runtime', manifest: { name: '@deepseek-ai/dsh-runtime' } }
   const cli = { dir: 'apps/cli', manifest: { name: '@deepseek-ai/dsh' } }
@@ -73,6 +99,18 @@ describe('workspace dependency ranges', () => {
         expect(check('external', '^1.2.3')).toEqual([])
       },
     )
+  })
+
+  it('rejects an unrelated unscoped vendor package while admitting the documented dsh-pocket identity', () => {
+    const check = (dir: string, name: string): string[] => checkWorkspaceProtocol([
+      dependency, cli, vendor, native, platform, unrelated,
+      { dir: 'packages/core/probe', manifest: { name: 'consumer', dependencies: { [name]: 'workspace:~' } } },
+      { dir, manifest: { name } },
+    ])
+    expect(check('vendor/dsh-pocket', 'dsh-pocket')).toEqual([])
+    expect(check('vendor/other', 'unscoped-other')).toEqual([
+      'consumer: dependencies.unscoped-other must use the workspace: protocol, got workspace:~',
+    ])
   })
 })
 

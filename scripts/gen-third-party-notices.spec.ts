@@ -9,6 +9,7 @@ import {
   claudeDistributionFromManifest,
   collectPythonDependencies,
   collectBundledPythonDependencies,
+  collectVendored,
   isOwnerAuthorizedRuntime,
   isPermissive,
   type Manifest,
@@ -38,6 +39,11 @@ describe('THIRD_PARTY_NOTICES.md', () => {
     expect(generated).toContain('Recipients must have access to those corresponding sources and notices.')
     expect(generated.split('## Development-only npm dependencies')[0]).toContain('| [`chrome-devtools-frontend`]')
     expect(generated).toContain('third-party license and notice files supplied by the npm source')
+    expect(generated).toContain('## GPL vendored source')
+    expect(generated).toContain('| `dsh-pocket` | `dsh-pocket` | [vendor/dsh-pocket](vendor/dsh-pocket/) | [upstream](https://github.com/shaobeichen/dsh-pocket) | GPL-2.0 |')
+    expect(generated).toContain('client/mobile/LICENSE.dsh-web-mobile')
+    expect(generated.split('## Development-only npm dependencies')[0]).toContain('| [`qrcode`]')
+    expect(generated.split('## Development-only npm dependencies')[0]).toContain('| [`qrcode-terminal`]')
     expect(readFileSync(resolve(root, 'THIRD_PARTY_NOTICES.md'), 'utf8'), 'stale notices — run `pnpm run gen-third-party-notices`').toBe(generated)
   })
 })
@@ -211,6 +217,20 @@ describe('virtualManifest', () => {
 })
 
 describe('parseVendoredRows', () => {
+  it('rejects a missing dsh-pocket manifest row before rendering notices', () => {
+    const text = readFileSync(resolve(root, 'vendor/README.md'), 'utf8')
+    const missing = text.split('\n').filter(line => !line.startsWith('| `dsh-pocket/`')).join('\n')
+    expect(() => collectVendored(root, missing)).toThrow('no manifest-table row for dsh-pocket')
+  })
+
+  it('keeps the GPL exception out of installed runtime license authorization', () => {
+    for (const name of ['unrelated-library', 'dsh-pocket', 'dsh-pocket-extra']) {
+      expect(() => assertRuntimeLicenses([{ name, license: 'GPL-2.0' }])).toThrow(`${name} (GPL-2.0)`)
+    }
+    expect(isPermissive('GPL-2.0')).toBe(false)
+    expect(isOwnerAuthorizedRuntime('dsh-pocket')).toBe(false)
+  })
+
   it('reads the committed vendor manifest table', () => {
     const rows = parseVendoredRows(readFileSync(resolve(root, 'vendor/README.md'), 'utf8'))
 

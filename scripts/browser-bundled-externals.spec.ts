@@ -95,6 +95,27 @@ describe('browser dependency discovery', () => {
     await expect(browserBundledExternals(root)).rejects.toThrow('has no browser build config')
   })
 
+  it('reads external imports from the exact prebuilt dsh-pocket client without rebuilding it', async () => {
+    const root = fixture()
+    library(root, 'react')
+    write(root, 'vendor/dsh-pocket/package.json', JSON.stringify({
+      name: 'dsh-pocket', dsh: { client: {} }, exports: { './client': './client/client.js' },
+    }))
+    const source = 'window.__ModuleLoader__.load({ factory: (require) => require("react") });\n'
+    write(root, 'vendor/dsh-pocket/client/client.js', source)
+    expect(await browserBundledExternals(root)).toEqual(new Set(['react']))
+    expect(readFileSync(join(root, 'vendor/dsh-pocket/client/client.js'), 'utf8')).toBe(source)
+    expect(existsSync(join(root, 'vendor/dsh-pocket/lib/types'))).toBe(false)
+  })
+
+  it.each([['vendor/other', 'dsh-pocket'], ['vendor/dsh-pocket', 'other']])(
+    'does not bypass browser config discovery for %s named %s', async (directory, name) => {
+      const root = fixture()
+      write(root, `${directory}/package.json`, JSON.stringify({ name, dsh: { client: {} } }))
+      await expect(browserBundledExternals(root)).rejects.toThrow()
+    },
+  )
+
   it.each([
     ['Rollup', false, false], ['Rollup', true, false], ['Rollup', true, true],
     ['Rolldown', false, false], ['Rolldown', true, false], ['Rolldown', true, true],

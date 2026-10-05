@@ -42,6 +42,25 @@ afterEach(() => {
 })
 
 describe('release families', () => {
+  it('discovers the exact unscoped GPL vendor and keeps its independent tag', () => {
+    const family = releaseFamily('vendor')
+    const pocket = family.members(resolve(import.meta.dirname, '../..')).find(member => member.name === 'dsh-pocket')
+    expect(pocket).toMatchObject({ directory: 'vendor/dsh-pocket', version: '2.10.6', manifest: { license: 'GPL-2.0' } })
+    expect(family.tagFor(pocket!)).toBe('vendor-dsh-pocket-v2.10.6')
+  })
+
+  it.each([
+    ['vendor/other', 'dsh-pocket', 'vendor'],
+    ['vendor/dsh-pocket', 'other', 'vendor'],
+    ['vendor/other', 'other', 'vendor'],
+    ['apps/pocket', 'dsh-pocket', 'dsh'],
+  ])('rejects unscoped %s named %s in the %s family', (directory, name, id) => {
+    const root = mkdtempSync(join(tmpdir(), 'dsh-release-unscoped-'))
+    roots.push(root)
+    write(join(root, directory, 'package.json'), JSON.stringify({ name, version: '2.10.6' }))
+    expect(() => releaseFamily(id).members(root)).toThrow('must name an @deepseek-ai package')
+  })
+
   it('publishes all current experimental packages', () => {
     const members = releaseFamily('dsh').members(resolve(import.meta.dirname, '../..'))
 
@@ -182,6 +201,24 @@ describe('release families', () => {
 
     expect(() => { vendor.verifyVersions(members) }).not.toThrow()
     expect(() => { vendor.verifyVersions([{ ...members[0]!, version: 'latest' }]) }).toThrow(/unpublishable version/)
+  })
+
+  it('admits only the documented dsh-pocket unscoped identity into the vendor family', () => {
+    const root = mkdtempSync(join(tmpdir(), 'dsh-release-gpl-vendor-'))
+    roots.push(root)
+    write(join(root, 'vendor/dsh-pocket/package.json'), JSON.stringify({
+      name: 'dsh-pocket', version: '2.10.6', license: 'GPL-2.0',
+    }))
+    write(join(root, 'vendor/cordis/package.json'), JSON.stringify({
+      name: '@deepseek-ai/cordis', version: '4.0.1',
+    }))
+    expect(releaseFamily('vendor').members(root).map(entry => entry.name).sort())
+      .toEqual(['@deepseek-ai/cordis', 'dsh-pocket'])
+
+    write(join(root, 'vendor/other/package.json'), JSON.stringify({
+      name: 'unscoped-other', version: '1.0.0',
+    }))
+    expect(() => releaseFamily('vendor').members(root)).toThrow(/must name an @deepseek-ai package/)
   })
 
   it('requires a current official client build only for dsh artifacts', () => {

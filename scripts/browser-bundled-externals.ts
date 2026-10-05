@@ -63,6 +63,39 @@ function readManifest(path: string): Manifest {
 }
 
 /**
+ * The one vendored package whose browser client ships prebuilt: the GPL-2.0
+ * mobile companion pins upstream's compiled `client/client.js` (a CJS
+ * `__ModuleLoader__` factory) and carries no tsdown config, so the disclosure
+ * walk reads the shipped file's `require(...)` imports instead of rebuilding
+ * (vendor/README.md). The pair is exact — neither the name at another
+ * directory nor another name at this directory takes this path.
+ */
+const PREBUILT_CLIENT_DIRECTORY = 'vendor/dsh-pocket'
+const PREBUILT_CLIENT_NAME = 'dsh-pocket'
+
+/** Bare `require(...)` specifier, double- or single-quoted. */
+const PREBUILT_REQUIRE = /require\(\s*(["'])([^"'\s]+)\1\s*\)/g
+
+/**
+ * Record the external packages a prebuilt CJS client bundle requires.
+ * @param file - absolute path of the shipped bundle.
+ * @param workspaceNames - workspace package names, which are never third-party.
+ * @param seen - disclosure set receiving each external package name.
+ */
+function recordPrebuiltClientRequires(file: string, workspaceNames: ReadonlySet<string>, seen: Set<string>): void {
+  const source = readFileSync(file, 'utf8')
+  for (const match of source.matchAll(PREBUILT_REQUIRE)) {
+    const specifier = match[2]
+    if (specifier === undefined || specifier.startsWith('.') || specifier.startsWith('/')
+      || specifier.startsWith('node:')) continue
+    const parts = specifier.split('/')
+    const name = specifier.startsWith('@') ? parts.slice(0, 2).join('/') : parts[0]
+    if (name === undefined || name === '' || workspaceNames.has(name)) continue
+    seen.add(name)
+  }
+}
+
+/**
  * Source aliases shared with the repository's source-plane TypeScript programs.
  * @param root - Repository root containing tsconfig.base.json.
  * @returns Exact and wildcard aliases for the Vite dependency walk.
@@ -89,6 +122,14 @@ async function collectClientBundles(
   for (const [manifestPath, manifest] of manifests) {
     if (manifest.private === true || manifest.dsh?.client === undefined) continue
     const dir = dirname(manifestPath)
+    if (dir === resolve(root, PREBUILT_CLIENT_DIRECTORY) && manifest.name === PREBUILT_CLIENT_NAME) {
+      const client = manifest.exports?.['./client']
+      if (typeof client !== 'string') {
+        throw new Error(`browser notices: ${PREBUILT_CLIENT_NAME} must export its prebuilt client as a string "./client" entry`)
+      }
+      recordPrebuiltClientRequires(resolve(dir, client), workspaceNames, seen)
+      continue
+    }
     const loaded = await import(pathToFileURL(resolve(dir, 'tsdown.config.ts')).href) as { default: UserConfigExport }
     const factory = await loaded.default
     const configured = typeof factory === 'function' ? await factory({ env: {} }, { ci: false }) : factory
