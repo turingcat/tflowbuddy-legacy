@@ -33,6 +33,8 @@ export interface PluginReference {
 }
 
 const root = resolve(import.meta.dirname, '..')
+/** The GPL vendor ships a reviewed prebuilt JS runtime/client, not TypeScript source. */
+const PREBUILT_VENDOR_PACKAGE = 'dsh-pocket'
 // These overlays are consumed by the built dsh app, so their bare specifiers
 // resolve from apps/cli.
 const appOverlayFiles = new Set([
@@ -445,6 +447,7 @@ function validateSourcePlaneResolution(): string[] {
     locationsBySpecifier.set(reference.name, locations)
   }
   for (const [specifier, locations] of locationsBySpecifier) {
+    if (specifier === PREBUILT_VENDOR_PACKAGE) continue
     const resolved = ts.resolveModuleName(specifier, containingFile, options, host).resolvedModule
     if (resolved !== undefined && sourceExtensions.has(resolved.extension)) continue
     violations.push(`${[...locations].join(', ')}: ${specifier} does not resolve to workspace source through tsconfig.base.json paths (add a mapping so the tsx source launch does not depend on built lib/)`)

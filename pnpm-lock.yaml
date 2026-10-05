@@ -2801,6 +2801,9 @@ importers:
       commander:
         specifier: ^15.0.0
         version: 15.0.0
+      dsh-pocket:
+        specifier: workspace:~
+        version: link:../../../vendor/dsh-pocket
       open:
         specifier: ^11.0.0
         version: 11.0.4

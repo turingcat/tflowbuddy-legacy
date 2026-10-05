@@ -240,6 +240,15 @@
         # its literals, for example: ['app.internal', ...ctx.webRuntime.trustedHosts].
         trustedHosts: !!js ctx.webRuntime.trustedHosts
 
+    # Phone companion proxy. It binds the external LAN/public listener while
+    # DSH's webserver remains loopback-only. Desktop supplies an explicit
+    # marker so self-update and self-restart stay owned by Electron.
+    - id: dsh-pocket
+      name: dsh-pocket
+      inject: [connection, webServer]
+      config:
+        isDesktop: !!js "ctx.get('profileContext')?.name === 'desktop'"
+
     # Raw Blob and ReadableStream uploads run independently of Connection's
     # RPC and generation service.
     - id: file-upload
