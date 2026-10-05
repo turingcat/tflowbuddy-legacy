@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
   ELECTRON_VERSION,
@@ -77,5 +78,18 @@ describe('electron runtime source', () => {
       JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).devDependencies
         .electron,
     ).toBe('40.10.6')
+  })
+
+  it('does not suppress the Electron postinstall needed by the development launcher', () => {
+    // The desktop dev launcher (`scripts/dev.ts`) does `require('electron')`,
+    // which only resolves to an executable path when the npm postinstall has
+    // downloaded the binary (path.txt + dist/). A workspace `allowBuilds`
+    // suppression of `electron` silently breaks that launch path, so the
+    // absence of any `electron: false` entry is a behavioral requirement.
+    const workspace = readFileSync(
+      join(import.meta.dirname, '../../../pnpm-workspace.yaml'),
+      'utf8',
+    )
+    expect(workspace).not.toMatch(/^ {2}electron: false$/m)
   })
 })
