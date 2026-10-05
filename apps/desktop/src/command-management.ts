@@ -7,6 +7,7 @@ import { promisify } from 'node:util'
 import type { MessageBoxOptions, MessageBoxReturnValue } from 'electron'
 import type { DesktopMessages } from './locale.ts'
 import type { UpdateDialogOptions } from './update-dialog.ts'
+import { commandManagerProcess } from './command-manager-process.ts'
 
 interface CommandState {
   fingerprint: string
@@ -45,6 +46,21 @@ export interface CommandManagerOptions {
 
 class CommandWorkerError extends Error {
   constructor(readonly code: string, message: string) { super(message) }
+}
+
+/**
+ * Build the AppleScript elevation wrapper. `/usr/bin/env -i` drops the inherited session, so
+ * each worker environment field becomes a quoted `NAME=value` argument re-declared inside the
+ * elevated environment before the executable and its arguments.
+ * @param environmentCount - Number of `NAME=value` fields argv carries before the executable.
+ * @returns AppleScript source consuming `[env..., executable, entry, operation, expected]`.
+ */
+function elevatedWorkerScript(environmentCount: number): string {
+  const fields = Array.from({ length: environmentCount },
+    (_unused, index) => ` & " " & quoted form of (item ${String(index + 1)} of argv)`).join('')
+  const command = Array.from({ length: 4 },
+    (_unused, index) => ` & " " & quoted form of (item ${String(environmentCount + index + 1)} of argv)`).join('')
+  return `on run argv\nset cmd to "/usr/bin/env -i"${fields}${command}\ndo shell script cmd with administrator privileges\nend run`
 }
 
 function object(value: unknown): value is Record<string, unknown> {
@@ -136,19 +152,24 @@ export class DesktopCommandManager {
   async idle(): Promise<void> { await this.operation }
 
   private async worker(operation: string, expected?: string, elevated = false): Promise<CommandState> {
-    const node = join(this.options.resources, 'runtime', 'primary-runtime', 'dependencies', 'node', 'bin', process.platform === 'win32' ? 'node.exe' : 'node')
-    const entry = join(this.options.resources, 'runtime', 'cli', 'command-manager.js')
+    // The worker runs through the packaged Electron executable in Node mode; the runtime
+    // intentionally carries no standalone Node binary to reference here.
+    const worker = commandManagerProcess(this.options.resources, process.platform, process.execPath)
     let stdout: string
     try {
       if (elevated) {
-        const appleScript = 'on run argv\nset cmd to "/usr/bin/env -i " & quoted form of (item 1 of argv) & " " & quoted form of (item 2 of argv) & " " & quoted form of (item 3 of argv) & " " & quoted form of (item 4 of argv)\ndo shell script cmd with administrator privileges\nend run'
-        stdout = (await promisify(execFile)('/usr/bin/osascript', ['-e', appleScript, node, entry, operation, expected ?? ''],
+        // `/usr/bin/env -i` drops the inherited session, so Node mode and the executable
+        // the launcher scripts resolve must be re-declared inside the elevated environment.
+        const elevatedEnv = Object.entries(worker.elevatedEnvironment)
+        const appleScript = elevatedWorkerScript(elevatedEnv.length)
+        stdout = (await promisify(execFile)('/usr/bin/osascript',
+          ['-e', appleScript, ...elevatedEnv.map(([name, value]) => `${name}=${value}`), worker.executable, worker.entry, operation, expected ?? ''],
           { maxBuffer: 65536 })).stdout
       } else {
         const env = Object.fromEntries(Object.entries(process.env)
           .filter(([name]) => !/KEY|SECRET|TOKEN|PASSWORD|^NODE_OPTIONS$|^NODE_PATH$/iu.test(name)))
-        stdout = (await promisify(execFile)(node, [entry, operation, ...expected === undefined ? [] : [expected]],
-          { timeout: 30000, maxBuffer: 65536, windowsHide: true, env })).stdout
+        stdout = (await promisify(execFile)(worker.executable, [worker.entry, operation, ...expected === undefined ? [] : [expected]],
+          { timeout: 30000, maxBuffer: 65536, windowsHide: true, env: { ...env, ...worker.environment } })).stdout
       }
     } catch (error) {
       if (elevated && object(error) && typeof error.stderr === 'string' && /\(-128\)\s*$/u.test(error.stderr)) {

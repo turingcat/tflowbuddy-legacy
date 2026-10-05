@@ -41,10 +41,13 @@ describe('electron runtime source', () => {
   })
 
   it('builds the community release URL from the pinned repository and tag', () => {
-    expect(resolveElectronRuntimeSource('win32', 'x64').url).toBe(
+    const x64 = resolveElectronRuntimeSource('win32', 'x64')
+    const ia32 = resolveElectronRuntimeSource('win32', 'ia32')
+    if (x64.kind !== 'community' || ia32.kind !== 'community') throw new Error('Windows requires community sources')
+    expect(x64.url).toBe(
       'https://github.com/e3kskoy7wqk/Electron-for-windows-7/releases/download/v40.2.0/dist.zip',
     )
-    expect(resolveElectronRuntimeSource('win32', 'ia32').url).toBe(
+    expect(ia32.url).toBe(
       'https://github.com/e3kskoy7wqk/Electron-for-windows-7/releases/download/v40.2.0/dist-x86.zip',
     )
   })

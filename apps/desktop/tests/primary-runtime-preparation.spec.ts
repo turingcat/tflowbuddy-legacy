@@ -3,8 +3,16 @@
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { expect, it } from 'vitest'
-import { smokePrimaryRuntime } from '../scripts/prepare-primary-runtime.ts'
+import { expect, it, vi } from 'vitest'
+import { preparePrimaryRuntime, smokePrimaryRuntime } from '../scripts/prepare-primary-runtime.ts'
+
+it('rejects ia32 before downloading a primary runtime with no locked interpreter', async () => {
+  vi.stubEnv('DSH_DESKTOP_TARGET_PLATFORM', 'win32')
+  vi.stubEnv('DSH_DESKTOP_TARGET_ARCH', 'ia32')
+  try {
+    await expect(preparePrimaryRuntime()).rejects.toThrow('primary runtime: unsupported target win-ia32')
+  } finally { vi.unstubAllEnvs() }
+})
 
 it('rejects a native Desktop payload that still ships Node.js before executing interpreters', async () => {
   const root = await mkdtemp(join(tmpdir(), 'desktop-with-node-'))

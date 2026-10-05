@@ -12,6 +12,7 @@ describe('desktop build paths', () => {
     const arm64 = desktopTargetBuildPaths('mac-arm64')
     const x64 = desktopTargetBuildPaths('mac-x64')
     const windows = desktopTargetBuildPaths('win-x64')
+    const windows32 = desktopTargetBuildPaths('win-ia32')
     const mutableKeys = [
       'root',
       'artifacts',
@@ -27,11 +28,12 @@ describe('desktop build paths', () => {
     ] as const
 
     for (const key of mutableKeys) {
-      expect(new Set([arm64[key], x64[key], windows[key]]).size).toBe(3)
+      expect(new Set([arm64[key], x64[key], windows[key], windows32[key]]).size).toBe(4)
     }
     expect(arm64.artifacts).toContain(join('targets', 'mac-arm64', 'artifacts'))
     expect(x64.dsh).toContain(join('targets', 'mac-x64', 'dsh'))
     expect(windows.runtime).toContain(join('targets', 'win-x64', 'runtime'))
+    expect(windows32.electron).toContain(join('targets', 'win-ia32', 'electron'))
   })
 
   it('shares only the immutable upstream download cache', () => {
@@ -48,12 +50,17 @@ describe('desktop build paths', () => {
       .toContain(join('targets', 'mac-x64', 'runtime', 'primary-runtime'))
     expect(developmentRuntimeDirectory({}, 'win32', 'arm64'))
       .toContain(join('targets', 'win-x64', 'runtime', 'primary-runtime'))
+    expect(developmentRuntimeDirectory({
+      DSH_DESKTOP_TARGET_PLATFORM: 'win32',
+      DSH_DESKTOP_TARGET_ARCH: 'ia32',
+    }, 'win32', 'x64')).toContain(join('targets', 'win-ia32', 'runtime', 'primary-runtime'))
   })
 
   it('maps every target to the platform and architecture of the payload it prepares', () => {
     expect(desktopTargetPlatform('mac-arm64')).toEqual({ platform: 'darwin', arch: 'arm64' })
     expect(desktopTargetPlatform('mac-x64')).toEqual({ platform: 'darwin', arch: 'x64' })
     expect(desktopTargetPlatform('win-x64')).toEqual({ platform: 'win32', arch: 'x64' })
+    expect(desktopTargetPlatform('win-ia32')).toEqual({ platform: 'win32', arch: 'ia32' })
     expect(() => desktopTargetPlatform('linux-x64' as 'mac-x64')).toThrow(/unsupported target/u)
   })
 

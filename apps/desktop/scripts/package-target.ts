@@ -48,15 +48,15 @@ const DESKTOP_UPLOAD_CREDENTIAL_ENV_NAMES = new Set([
 const AUTOMATIC_BUILD_VERSION = 'auto'
 
 /** Fixed platform and architecture identifiers exposed by package scripts. */
-export type DesktopPackageTargetName = 'mac-arm64' | 'mac-x64' | 'win-x64'
+export type DesktopPackageTargetName = 'mac-arm64' | 'mac-x64' | 'win-x64' | 'win-ia32'
 
 /** One supported release target and its electron-builder selectors. */
 export interface DesktopPackageTarget {
   readonly name: DesktopPackageTargetName
   readonly platform: 'darwin' | 'win32'
-  readonly arch: 'arm64' | 'x64'
+  readonly arch: 'arm64' | 'x64' | 'ia32'
   readonly builderPlatform: '--mac' | '--win'
-  readonly builderArch: '--arm64' | '--x64'
+  readonly builderArch: '--arm64' | '--x64' | '--ia32'
 }
 
 const TARGETS: Record<DesktopPackageTargetName, DesktopPackageTarget> = {
@@ -80,6 +80,13 @@ const TARGETS: Record<DesktopPackageTargetName, DesktopPackageTarget> = {
     arch: 'x64',
     builderPlatform: '--win',
     builderArch: '--x64',
+  },
+  'win-ia32': {
+    name: 'win-ia32',
+    platform: 'win32',
+    arch: 'ia32',
+    builderPlatform: '--win',
+    builderArch: '--ia32',
   },
 }
 
@@ -177,8 +184,16 @@ export function resolveDesktopPackageTarget(
     throw new Error(`desktop package: unsupported target ${JSON.stringify(name)}; expected ${Object.keys(TARGETS).join(', ')}`)
   }
   const target = TARGETS[name]
-  if (target.platform === 'win32' && (hostPlatform !== 'win32' || hostArch !== 'x64')) {
+  if (target.platform === 'win32' && hostPlatform !== 'win32') {
+    throw new Error(`desktop package: ${name} requires a Windows build host`)
+  }
+  // Preparation downloads the target Electron distribution, so an x64 host can prepare
+  // either Windows architecture; an ia32 host can only prepare and smoke its own target.
+  if (name === 'win-x64' && hostArch !== 'x64') {
     throw new Error('desktop package: win-x64 requires a Windows x64 build host')
+  }
+  if (name === 'win-ia32' && hostArch !== 'x64' && hostArch !== 'ia32') {
+    throw new Error('desktop package: win-ia32 requires a Windows x64 or ia32 build host')
   }
   if (target.platform === 'darwin' && hostPlatform !== 'darwin') {
     throw new Error(`desktop package: ${name} requires a macOS build host`)
@@ -238,12 +253,12 @@ export function parseDesktopPackageInvocation(
   // Windows has no release signing requirement in a local build, and macOS has
   // no Developer ID on a development machine; both produce a launchable local
   // artifact that is never distributed.
-  if (values.unsigned && name !== 'win-x64' && name !== 'mac-arm64' && name !== 'mac-x64') {
-    throw new Error('desktop package: --unsigned requires a Windows x64 or macOS target')
+  if (values.unsigned && name !== 'win-x64' && name !== 'win-ia32' && name !== 'mac-arm64' && name !== 'mac-x64') {
+    throw new Error('desktop package: --unsigned requires a Windows or macOS target')
   }
   // An unsigned macOS build prepares its runtime without credentials, so the
   // two modes compose there; Windows preparation still requires its signer.
-  if (values.unsigned && values['prepare-only'] && name === 'win-x64') {
+  if (values.unsigned && values['prepare-only'] && (name === 'win-x64' || name === 'win-ia32')) {
     throw new Error('desktop package: --unsigned cannot use --prepare-only for Windows')
   }
   const requestedBuildVersion = values['build-version']?.trim()
@@ -493,14 +508,15 @@ export async function packageTarget(
   await execute(['run', 'prepare:dsh', ...(signPrimaryRuntime ? ['--defer-runtime-smoke'] : [])], downloadEnv)
   if (signPrimaryRuntime) await execute(['run', 'sign:primary-runtime', '--dsh'], electronBuilderEnv)
   if (invocation.prepareOnly) return
-  if (target.platform === 'darwin' && !invocation.directory && !invocation.unsigned) {
+  if (target.platform === 'darwin' && target.arch !== 'ia32' && !invocation.directory && !invocation.unsigned) {
+    const arch = target.arch
     await execute([
       ...desktopElectronBuilderArguments(target, true),
       '--config.mac.notarize=false',
     ], electronBuilderEnv)
     await execute(['exec', 'tsx', 'scripts/smoke-packaged-runtime.ts'], targetEnv)
     await withMacOSNotarizationProxy(mac?.notarizationProxy, () => packageMacOSArtifacts({
-      arch: target.arch,
+      arch,
       // electron-builder named these artifacts after the published version, so locating them uses the same identifier.
       version: resolveDesktopBuildVersion(environment, packageVersion(join(APP_ROOT, 'package.json'), 'desktop package')),
       artifactsRoot: buildPaths.artifacts,

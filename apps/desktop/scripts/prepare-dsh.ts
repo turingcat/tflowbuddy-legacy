@@ -41,7 +41,10 @@ const STORE_ROOT = join(BUILD_ROOT, 'store')
 const RUNTIME_ROOT = BUILD_PATHS.runtime
 const PNPM_BUILD_STATE = BUILD_PATHS.dshPnpm
 const PACKAGE_SET_ROOT = BUILD_PATHS.packageSet
-const NODE = join(BUILD_PATHS.electron, process.platform === 'win32' ? 'electron.exe' : 'Electron.app/Contents/MacOS/Electron')
+// The prepared distribution belongs to the selected target, not the host process that
+// happens to run the script.
+const NODE = join(BUILD_PATHS.electron,
+  desktopTargetPlatform(resolveDesktopBuildTarget()).platform === 'win32' ? 'electron.exe' : 'Electron.app/Contents/MacOS/Electron')
 const PNPM = join(RUNTIME_ROOT, 'pnpm', 'bin', 'pnpm.mjs')
 
 function manifestVersion(path: string, subject: string): string {
@@ -129,8 +132,9 @@ async function main(): Promise<void> {
     )
     await packagingStep(process.env.DSH_DESKTOP_PACKAGING_RUN_DIR, 'runtime:install', () => runPnpm(['install', '--prod', '--frozen-lockfile', '--trust-lockfile']))
     const packageSet = readDesktopCorePackageSet(BUILD_ROOT, release.version)
-    const targetName = resolveDesktopBuildTarget()
-    const target = { platform: process.platform, arch: desktopTargetPlatform(targetName).arch }
+    // Native artifact selection and descriptor metadata follow the payload target; deriving the
+    // platform from the host process would silently re-tag a cross-prepared runtime.
+    const target = desktopTargetPlatform(resolveDesktopBuildTarget())
     const modules = join(BUILD_ROOT, 'node_modules')
     const officeManifest = JSON.parse(readFileSync(join(modules, '@deepseek-ai/libreoffice-kit/package.json'), 'utf8'))
     const officeEngine = selectOfficeEngine(officeManifest, target)
@@ -155,9 +159,10 @@ async function main(): Promise<void> {
     }
     // A local unsigned build has no Developer ID and no signing keychain, so the
     // runtime keeps the signatures its own packages published.
-    if (process.platform === 'darwin' && process.env.DSH_DESKTOP_UNSIGNED !== '1') {
-      await packagingStep(process.env.DSH_DESKTOP_PACKAGING_RUN_DIR, 'sign:dsh-native', () => signMacOSRuntime(DSH_OUTPUT_ROOT, resolveDesktopAppId(process.env), resolveMacOSSigningEnvironment(process.env), target.arch, join(BUILD_PATHS.root, 'signature-cache')))
-      await packagingStep(process.env.DSH_DESKTOP_PACKAGING_RUN_DIR, 'sign:primary-native', () => signMacOSRuntime(join(RUNTIME_ROOT, 'primary-runtime'), resolveDesktopAppId(process.env), resolveMacOSSigningEnvironment(process.env), target.arch, join(BUILD_PATHS.root, 'signature-cache')))
+    if (target.platform === 'darwin' && target.arch !== 'ia32' && process.env.DSH_DESKTOP_UNSIGNED !== '1') {
+      const arch = target.arch
+      await packagingStep(process.env.DSH_DESKTOP_PACKAGING_RUN_DIR, 'sign:dsh-native', () => signMacOSRuntime(DSH_OUTPUT_ROOT, resolveDesktopAppId(process.env), resolveMacOSSigningEnvironment(process.env), arch, join(BUILD_PATHS.root, 'signature-cache')))
+      await packagingStep(process.env.DSH_DESKTOP_PACKAGING_RUN_DIR, 'sign:primary-native', () => signMacOSRuntime(join(RUNTIME_ROOT, 'primary-runtime'), resolveDesktopAppId(process.env), resolveMacOSSigningEnvironment(process.env), arch, join(BUILD_PATHS.root, 'signature-cache')))
 
     }
     await packagingStep(process.env.DSH_DESKTOP_PACKAGING_RUN_DIR, 'runtime:manifests', () => prepareRuntimeManifests(DSH_OUTPUT_ROOT))

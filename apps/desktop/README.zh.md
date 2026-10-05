@@ -2,6 +2,10 @@
 
 [English](README.md) | 中文
 
+macOS 安装包使用官方 Electron `40.10.6`；Windows 安装包使用[运行时来源表](scripts/electron-runtime.mjs)中固定摘要的社区 Electron-for-windows-7 `40.2.0` 压缩包。准备过程在解压前校验下载文件和缓存文件，并在 Node 模式下核对可执行文件的 Electron 版本、平台和架构。`runtime/bin` 只包含 shell 启动脚本；命令管理进程也使用应用自身的可执行文件及 `ELECTRON_RUN_AS_NODE=1`，包括需要管理员授权的操作。
+
+`win-ia32` 目标拥有独立的构建和更新目录，允许 Windows x64 或 ia32 构建主机，但完整打包会在主运行时准备阶段明确失败：[解释器锁文件](../../scripts/primary-runtime/lock.json)没有 ia32 Python 发行版或 wheel。在这套依赖和原生依赖通过目标主机 smoke 检查之前，不发布 ia32 安装包。选择兼容的 Electron 壳不等于已验证 Windows 7 运行。
+
 桌面埋点遵循[产品采集策略](../../packages/client/product-analytics/README.zh.md)及其动态应用配置，不包含 Web 使用情况。安装更新会等待该操作的本地埋点接收请求结束，再锁定 API 准入并停止 Host。接收请求的时限为一秒，失败不会阻止安装，也不等待收集端完成发送。
 
 桌面应用是完整 dsh Web 应用外的一层 Electron 壳。Electron RunAsNode 子进程启动共享 profile runner，Electron 立即从 `dsh-app://app/` 加载打包内的 Web 入口。共享加载页等待 Host 启动注入，然后在同一文档中启动客户端。Electron 将应用 HTTP 请求转发给已认证的 Web Host，转发时丢弃描述 Node fetch 连接而非资源本身的响应头（`transfer-encoding`、`connection`、`keep-alive`），并把插件 bundle 响应标记为 `no-store`，因为其每次启动都变化的 revision 只会在 Chromium 磁盘缓存中累积；WebSocket 流连接到该 Host，仅为归属的应用窗口附加凭据。Node IPC 承载启动注入、就绪与关闭。Desktop 默认监听系统分配的端口，因此不会与 Web 的 `3080` 或系统保留端口冲突；可通过 `webserver.config.port` patch 覆盖。
@@ -73,7 +77,7 @@ Desktop 默认注册 `office-docx`、`office-pptx` 和 `office-xlsx`。这些技
 
 Desktop 私有的 `runtime/bin` 目录仅添加到包安装进程，不进入 PTC 和 agent shell 从 Host 继承的 PATH。该工具不修改 PATH、环境变量或用户包管理器配置。pnpm 的全局包、命令入口和 store 保留自身默认值及用户设置，包括环境不支持全局安装时的原生错误。不提供独立依赖更新器。[第一方 Runtime 决策](../../.agents/notes/implemented/feature/2026-09-14-desktop-primary-runtime.zh.md)记录这些选择。
 
-Node 准备内置解释器和 Python 库，无需系统 Python 或 pip。[下载锁](../../scripts/primary-runtime/lock.json)固定解释器压缩包、Python 分发包版本及目标平台 wheel 的 URL 和哈希；共享构建器从根开发依赖中解析 pnpm 固定版本。测试检查根 package-manager 版本和 Desktop 固定版本保持一致。每个目标的 wheel 文件名必须与分发包版本一致。所选目标、wheel 记录及分发包映射内部的键顺序，以及 wheel 条目顺序都会影响产物身份，编辑时须保留；锁文件顶层键的顺序不影响该身份。库 wheel 解压到 site-packages，各 wheel 的 `.data/scripts` 目录保留辅助文件，不生成命令行包装器。其他安装方案会被拒绝。本机目标检查在清理暂存目录后以及 macOS 签名后验证锁定 wheel 的集合与版本，允许解释器自带的 pip，并检查 Python 版本、Office 文档读写和依赖完整性，不写入字节码。独立 Node 可执行文件获得 V8 所需的 JIT 权限；x64 目标还获得 `com.apple.security.cs.allow-unsigned-executable-memory`，允许可执行代码页，包括在 Rosetta 下运行时。ARM64 Node 和 Office 辅助程序保留仅 JIT 权限。跨目标执行和签名安装需要对应的发布主机。`dev:desktop` 和 `start:desktop` 都会在启动 Electron 前准备 `.desktop-build/targets/<target>/runtime/primary-runtime`；首次准备可能需要下载锁定的依赖。准备未完成时，启动命令不能报告成功退出。
+Node 准备内置解释器和 Python 库，无需系统 Python 或 pip。[下载锁](../../scripts/primary-runtime/lock.json)固定解释器压缩包、Python 分发包版本及目标平台 wheel 的 URL 和哈希；共享构建器从根开发依赖中解析 pnpm 固定版本。测试检查根 package-manager 版本和 Desktop 固定版本保持一致。每个目标的 wheel 文件名必须与分发包版本一致。所选目标、wheel 记录及分发包映射内部的键顺序，以及 wheel 条目顺序都会影响产物身份，编辑时须保留；锁文件顶层键的顺序不影响该身份。库 wheel 解压到 site-packages，各 wheel 的 `.data/scripts` 目录保留辅助文件，不生成命令行包装器。其他安装方案会被拒绝。本机目标检查在清理暂存目录后以及 macOS 签名后验证锁定 wheel 的集合与版本，允许解释器自带的 pip，并检查 Python 版本、Office 文档读写和依赖完整性，不写入字节码。Electron 可执行文件获得 V8 所需的 JIT 权限；x64 目标还获得 `com.apple.security.cs.allow-unsigned-executable-memory`，允许可执行代码页，包括在 Rosetta 下运行时。ARM64 Electron 和 Office 辅助程序保留仅 JIT 权限。跨目标执行和签名安装需要对应的发布主机。`dev:desktop` 和 `start:desktop` 都会在启动 Electron 前准备 `.desktop-build/targets/<target>/runtime/primary-runtime`；首次准备可能需要下载锁定的依赖。准备未完成时，启动命令不能报告成功退出。
 
 | 决策 | 原因 | 直接结果 |
 |---|---|---|
@@ -427,7 +431,7 @@ Windows 下载完成后的更新确认说明应用会在安装期间关闭、完
 
 ### 强制更新策略
 
-TFlowBuddy 打包不依赖上游更新策略服务，也不嵌入 `dshMandatoryUpdatePolicy`，因此打包后的应用不会查询上游策略接口。[强更客户端决策](../../.agents/notes/implemented/feature/2026-09-11-desktop-mandatory-update-client.zh.md)记录了保留的开发客户端。
+TFlowBuddy 打包不依赖上游更新策略服务，也不嵌入 `dshMandatoryUpdatePolicy`，因此打包后的应用不会查询上游策略接口。
 
 未打包的开发客户端可通过 `DSH_DESKTOP_MANDATORY_UPDATE_CONFIG` 提供完整策略 JSON，并要求设置 `DSH_DESKTOP_APP_ID`；缺少 JSON 时不查询策略。仅匿名开发策略允许使用 HTTP `127.0.0.1`。策略请求拒绝重定向；仅测试身份验证携带网关 Cookie。
 

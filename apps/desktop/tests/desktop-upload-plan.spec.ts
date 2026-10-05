@@ -113,6 +113,12 @@ afterEach(async () => {
 })
 
 describe('desktop upload plan', () => {
+  it('isolates ia32 installer files and feeds from x64', async () => {
+    const paths = await fixture('win-ia32', '1.2.3', 'production')
+    const plan = await createDesktopUploadPlan('win-ia32', paths)
+    expect(plan.artifacts[0]?.key).toBe('dsh-desk/bin/win-ia32/deepseek-harness-1.2.3-win-ia32.exe')
+    expect(plan.publicUrl).toContain('/win-ia32')
+  })
   it('uploads only the selected latest installer to each deployment using the existing COS transport', async () => {
     const published = []
     for (const environment of ['production', 'test'] as const) {

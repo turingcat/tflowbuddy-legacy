@@ -21,7 +21,8 @@ import {
 import { resolveDesktopAutoUpdateConfig } from './desktop-auto-update-environment.mjs'
 import { resolveDesktopBuildCommit } from './desktop-build-commit.mjs'
 import { resolveDesktopBuildVersion } from './desktop-build-version.mjs'
-import { desktopTargetBuildPaths, resolveDesktopBuildTarget } from './desktop-build-paths.mjs'
+import { desktopTargetBuildPaths, desktopTargetPlatform, resolveDesktopBuildTarget } from './desktop-build-paths.mjs'
+import { resolveElectronRuntimeSource } from './electron-runtime.mjs'
 import { installWindowsDirectoryInstaller } from './windows-directory-installer.mjs'
 import { preserveWindowsRuntimeSignature, signWindowsCode } from './windows-runtime-signature.mjs'
 import { prepareWindowsAsarUnpack, verifyWindowsAsarUnpack } from './windows-asar-unpack.mjs'
@@ -58,11 +59,16 @@ export function createElectronBuilderConfig(
   const packagesMacOS = targetPlatform === 'darwin' || (targetPlatform === undefined && hostPlatform === 'darwin')
   const packagesWindows = resolvedPlatform === 'win32'
   if (resolvedPlatform === 'win32') installWindowsDirectoryInstaller()
+  const buildTarget = resolveDesktopBuildTarget(env, hostPlatform, hostArch)
+  // The distribution is prepared by `prepare:runtime`; pinning its declared version keeps
+  // electron-builder from substituting the host npm Electron for the community Windows build.
+  const runtimeTarget = desktopTargetPlatform(buildTarget)
+  const electronSource = resolveElectronRuntimeSource(runtimeTarget.platform, runtimeTarget.arch)
   // A local unsigned build has no Developer ID and no Apple credentials, so it
   // ad-hoc signs instead; a release still resolves and verifies the real identity.
   const macOSSigning = packagesMacOS && !unsigned ? resolveMacOSSigningEnvironment(env) : undefined
   if (packagesMacOS && !unsigned) resolveMacOSNotarizationEnvironment(env)
-  const buildPaths = desktopTargetBuildPaths(resolveDesktopBuildTarget(env, hostPlatform, hostArch))
+  const buildPaths = desktopTargetBuildPaths(buildTarget)
   let primaryRuntimeDestination
   let dshDestination
   let windowsCode = []
@@ -110,6 +116,7 @@ export function createElectronBuilderConfig(
     directories: { output: unsigned ? buildPaths.unsignedArtifacts : buildPaths.artifacts },
     asar: true,
     electronDist: buildPaths.electron,
+    electronVersion: electronSource.version,
     electronFuses: { runAsNode: true },
     beforeBuild: async () => {
       if (resolvedPlatform !== 'win32') return true

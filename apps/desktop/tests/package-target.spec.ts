@@ -19,6 +19,18 @@ describe('desktop package target', () => {
     expect(resolveDesktopPackageTarget('win-x64', 'win32', 'x64')).toMatchObject({
       platform: 'win32', arch: 'x64', builderPlatform: '--win', builderArch: '--x64',
     })
+    expect(resolveDesktopPackageTarget('win-ia32', 'win32', 'x64')).toMatchObject({
+      platform: 'win32', arch: 'ia32', builderPlatform: '--win', builderArch: '--ia32',
+    })
+    expect(resolveDesktopPackageTarget('win-ia32', 'win32', 'ia32')).toMatchObject({
+      platform: 'win32', arch: 'ia32', builderPlatform: '--win', builderArch: '--ia32',
+    })
+  })
+
+  it('rejects an x64 Windows target on an ia32 host instead of substituting architectures', () => {
+    expect(() => resolveDesktopPackageTarget('win-x64', 'win32', 'ia32')).toThrow(/Windows x64/u)
+    expect(() => resolveDesktopPackageTarget('win-ia32', 'darwin', 'arm64')).toThrow(/Windows/u)
+    expect(() => resolveDesktopPackageTarget('win-ia32', 'win32', 'arm64')).toThrow(/Windows/u)
   })
 
   it('allows an Apple Silicon host to build the Intel target through Rosetta', () => {
@@ -27,7 +39,7 @@ describe('desktop package target', () => {
 
   it('rejects unsupported targets and hosts before building', () => {
     expect(() => resolveDesktopPackageTarget('linux-x64', 'linux', 'x64')).toThrow(/unsupported target/u)
-    expect(() => resolveDesktopPackageTarget('win-x64', 'darwin', 'arm64')).toThrow(/Windows x64/u)
+    expect(() => resolveDesktopPackageTarget('win-x64', 'darwin', 'arm64')).toThrow(/Windows/u)
     expect(() => resolveDesktopPackageTarget('mac-arm64', 'darwin', 'x64')).toThrow(/Apple Silicon/u)
     expect(() => resolveDesktopPackageTarget('mac-arm64', 'linux', 'arm64')).toThrow(/macOS/u)
     expect(() => resolveDesktopPackageTarget('mac-x64', 'darwin', 'ppc64')).toThrow(/Rosetta/u)
@@ -71,6 +83,8 @@ describe('desktop package target', () => {
       'never',
     ])
     expect(desktopElectronBuilderArguments(target, true)).toContain('--dir')
+    expect(desktopElectronBuilderArguments(resolveDesktopPackageTarget('win-ia32', 'win32', 'x64'), false))
+      .toEqual(['exec', 'electron-builder', '--config', 'electron-builder.config.mjs', '--win', '--ia32', '--publish', 'never'])
   })
 
   it('accepts an unsigned artifact for either platform and rejects other targets or preparation-only use', () => {
@@ -84,7 +98,7 @@ describe('desktop package target', () => {
       unsigned: true, directory: true,
     })
     expect(() => parseDesktopPackageInvocation(['linux-x64', '--unsigned'], 'linux', 'x64'))
-      .toThrow(/requires a Windows x64 or macOS target/u)
+      .toThrow(/requires a Windows or macOS target/u)
     expect(() => parseDesktopPackageInvocation(['--unsigned', '--prepare-only'], 'win32', 'x64'))
       .toThrow(/cannot use --prepare-only/u)
   })

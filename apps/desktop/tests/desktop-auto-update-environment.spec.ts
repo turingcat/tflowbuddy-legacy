@@ -11,6 +11,10 @@ import {
 const RELEASE_ID = '0123456789abcdef0123456789abcdef'
 
 describe('desktop auto-update environment', () => {
+  it('keeps ia32 update metadata separate from Windows x64', () => {
+    expect(resolveDesktopAutoUpdateTarget('win32', 'ia32')).toBe('win-ia32')
+    expect(desktopBuildRecordFilename('win-ia32')).toBe('win-ia32-release.json')
+  })
   it.each([undefined, 'test'])('requires a release ID for deployment %s', (deployment) => {
     const environment = { DSH_DESKTOP_AUTO_UPDATE_ENV: deployment, DOWNLOAD_TEST_ORIGIN: 'https://updates.example.com',
       DOWNLOAD_TEST_COS_BUCKET: 'test-bucket' }
