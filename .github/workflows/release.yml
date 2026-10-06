@@ -29,14 +29,16 @@ jobs:
             platform: win32
             arch: x64
             extension: exe
+            shell: pwsh
           - target: mac-arm64
             runner: macos-15
             platform: darwin
             arch: arm64
             extension: dmg
+            shell: bash
     defaults:
       run:
-        shell: bash
+        shell: ${{ matrix.shell }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -51,22 +53,33 @@ jobs:
           TARGET_PLATFORM: ${{ matrix.platform }}
           TARGET_ARCH: ${{ matrix.arch }}
         run: |
-          node --input-type=module <<'JS'
-          import { readFileSync, writeFileSync } from 'node:fs';
-          const readVersion = path => JSON.parse(readFileSync(path, 'utf8')).version;
-          const version = readVersion('apps/desktop/package.json');
-          if (version !== readVersion('package.json')) throw new Error('Desktop and workspace versions differ');
-          if (process.env.GITHUB_REF_TYPE === 'tag' && process.env.GITHUB_REF_NAME !== `v${version}`) {
-            throw new Error(`Release tag must be v${version}`);
-          }
-          if (process.platform !== process.env.TARGET_PLATFORM || process.arch !== process.env.TARGET_ARCH) {
-            throw new Error('Build host does not match the desktop target');
-          }
-          const suffix = process.platform === 'win32' ? 'windows' : 'macos';
-          writeFileSync(`apps/desktop/.env.${suffix}`, 'DSH_DESKTOP_NPM_REGISTRY=https://registry.npmjs.org\n');
-          JS
+          node --input-type=module -e '
+            import { readFileSync, writeFileSync } from "node:fs";
+            import { resolveElectronRuntimeSource } from "./apps/desktop/scripts/electron-runtime.mjs";
+            const readVersion = path => JSON.parse(readFileSync(path, "utf8")).version;
+            const version = readVersion("apps/desktop/package.json");
+            if (version !== readVersion("package.json")) throw new Error("Desktop and workspace versions differ");
+            if (process.env.GITHUB_REF_TYPE === "tag" && process.env.GITHUB_REF_NAME !== `v${version}`) {
+              throw new Error(`Release tag must be v${version}`);
+            }
+            if (process.platform !== process.env.TARGET_PLATFORM || process.arch !== process.env.TARGET_ARCH) {
+              throw new Error("Build host does not match the desktop target");
+            }
+            const source = resolveElectronRuntimeSource(process.env.TARGET_PLATFORM, process.env.TARGET_ARCH);
+            console.log(`Electron runtime: ${source.kind} ${source.version} ${source.platform}/${source.arch}`);
+            const suffix = process.platform === "win32" ? "windows" : "macos";
+            writeFileSync(`apps/desktop/.env.${suffix}`, "DSH_DESKTOP_NPM_REGISTRY=https://registry.npmjs.org\n");
+          '
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Test desktop runtime packaging
+        run: >-
+          pnpm exec vitest run scripts/tests/desktop-release.spec.ts
+          apps/desktop/tests/electron-runtime.spec.ts
+          apps/desktop/tests/desktop-build-paths.spec.ts
+          apps/desktop/tests/package-target.spec.ts
+          apps/desktop/tests/runtime-source-preparation.spec.ts
+          apps/desktop/tests/primary-runtime-preparation.spec.ts
       - name: Package desktop with bundled runtime
         run: pnpm --dir apps/desktop run package ${{ matrix.target }} --unsigned
       - name: Upload desktop installer

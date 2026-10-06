@@ -195,7 +195,7 @@ Desktop 在 Host 启动后、打开工作区前检查模型 API Key 引用是否
 
 ### 发布版本
 
-TFlowBuddy 从 `0.1.0` 开始发布；第一方工作区包使用相同版本，保证内置运行时与桌面壳一致。[桌面发布工作流](../../.github/workflows/release.yml) 构建 Windows x64（`.exe`）和 macOS Apple 芯片（`.dmg`）安装包，包含 Electron、pnpm、Python 和应用运行时。`v<version>` 标签将两个安装包发布到 GitHub Releases；手动运行分支只保留构建产物。此工作流采用未签名打包：Windows 安装包没有发布者签名，macOS 应用仅做临时签名，不做 Apple 公证。不单独发布 CLI、Python SDK、原生扩展或 npm 产品。
+TFlowBuddy 从 `0.1.0` 开始发布；第一方工作区包使用相同版本，保证内置运行时与桌面壳一致。[桌面发布工作流](../../.github/workflows/release.yml) 构建 Windows x64（`.exe`）和 macOS Apple 芯片（`.dmg`）安装包，包含 Electron、pnpm、Python 和应用运行时。`v<version>` 标签将两个安装包发布到 GitHub Releases；手动运行分支只保留构建产物。Windows 任务使用原生 PowerShell，macOS 任务使用 Bash；两个平台均在打包前运行运行时来源与准备过程的定向测试。此工作流采用未签名打包：Windows 安装包没有发布者签名，macOS 应用仅做临时签名，不做 Apple 公证。不单独发布 CLI、Python SDK、原生扩展或 npm 产品。
 
 TFlowBuddy 仅维护简体中文和英文。应用字典和打包后的 Electron 语言资源均限定为这两种语言；不支持的系统语言回退到英文。
 

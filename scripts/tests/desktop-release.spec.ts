@@ -11,7 +11,8 @@ interface ReleaseWorkflow {
   jobs: Record<string, {
     if?: string
     needs?: string
-    strategy?: { matrix: { include: Array<{ target: string; platform: string; arch: string; extension: string }> } }
+    defaults?: { run: { shell: string } }
+    strategy?: { matrix: { include: Array<{ target: string; platform: string; arch: string; extension: string; shell: string }> } }
     steps: Array<{ name?: string; uses?: string; run?: string; with?: Record<string, string> }>
   }>
 }
@@ -35,6 +36,21 @@ describe('TFlowBuddy desktop release', () => {
     expect(uploadStep).toBeGreaterThan(packageStep)
     expect(steps[uploadStep]!.with?.path).toContain('/unsigned-artifacts/tflowbuddy-*.${{ matrix.extension }}')
     expect(steps[uploadStep]!.with?.['if-no-files-found']).toBe('error')
+  })
+
+  it('runs Windows packaging in native PowerShell and checks runtime sources before packaging', () => {
+    const job = workflow.jobs.desktop!
+    const rows = job.strategy!.matrix.include
+    expect(rows.find(row => row.target === 'win-x64')?.shell).toBe('pwsh')
+    expect(rows.find(row => row.target === 'mac-arm64')?.shell).toBe('bash')
+    expect(job.defaults?.run.shell).toBe('${{ matrix.shell }}')
+    const steps = job.steps
+    const verify = steps.find(step => step.name === 'Verify release version and build host')!.run!
+    expect(verify).toContain('resolveElectronRuntimeSource')
+    expect(verify).not.toContain("<<'JS'")
+    const tests = steps.findIndex(step => step.name === 'Test desktop runtime packaging')
+    expect(tests).toBeGreaterThan(steps.findIndex(step => step.name === 'Install dependencies'))
+    expect(tests).toBeLessThan(steps.findIndex(step => step.name === 'Package desktop with bundled runtime'))
   })
 
   it('publishes only after both installers pass and only from product version tags', () => {
