@@ -38,6 +38,13 @@ describe('TFlowBuddy desktop release', () => {
     expect(steps[uploadStep]!.with?.['if-no-files-found']).toBe('error')
   })
 
+  it('allows the pinned Electron installer to prepare the development runtime', () => {
+    const workspace = load(readFileSync(resolve(root, 'pnpm-workspace.yaml'), 'utf8')) as {
+      allowBuilds: Record<string, boolean>
+    }
+    expect(workspace.allowBuilds.electron).toBe(true)
+  })
+
   it('runs Windows packaging in native PowerShell and checks runtime sources before packaging', () => {
     const job = workflow.jobs.desktop!
     const rows = job.strategy!.matrix.include

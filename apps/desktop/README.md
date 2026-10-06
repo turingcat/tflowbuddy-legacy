@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-macOS packages use official Electron `40.10.6`; Windows packages use the digest-locked community Electron-for-windows-7 `40.2.0` archives declared in [the runtime source table](scripts/electron-runtime.mjs). Preparation verifies downloaded and cached archives before extraction and checks the executable’s Electron version, platform and architecture in Node mode. `runtime/bin` contains only shell launchers; command-management workers also use the application executable with `ELECTRON_RUN_AS_NODE=1`, including administrator-authorized operations.
+macOS packages use official Electron `40.10.6`; Windows packages use the digest-locked community Electron-for-windows-7 `40.2.0` archives declared in [the runtime source table](scripts/electron-runtime.mjs). Workspace dependency installation allows Electron's postinstall to prepare the official development executable; packaging selects its runtime independently. Preparation verifies downloaded and cached archives before extraction and checks the executable’s Electron version, platform and architecture in Node mode. `runtime/bin` contains only shell launchers; command-management workers also use the application executable with `ELECTRON_RUN_AS_NODE=1`, including administrator-authorized operations.
 
 The `win-ia32` target has isolated build and update directories and accepts a Windows x64 or ia32 build host, but full packaging stops at primary-runtime preparation: [the interpreter lock](../../scripts/primary-runtime/lock.json) has no ia32 Python distribution or wheels. No ia32 installer is published until that dependency set and the native dependencies pass target-host smoke checks. Windows 7 execution is not established by selecting a compatible Electron shell.
 

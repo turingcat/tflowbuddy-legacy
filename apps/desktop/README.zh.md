@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-macOS 安装包使用官方 Electron `40.10.6`；Windows 安装包使用[运行时来源表](scripts/electron-runtime.mjs)中固定摘要的社区 Electron-for-windows-7 `40.2.0` 压缩包。准备过程在解压前校验下载文件和缓存文件，并在 Node 模式下核对可执行文件的 Electron 版本、平台和架构。`runtime/bin` 只包含 shell 启动脚本；命令管理进程也使用应用自身的可执行文件及 `ELECTRON_RUN_AS_NODE=1`，包括需要管理员授权的操作。
+macOS 安装包使用官方 Electron `40.10.6`；Windows 安装包使用[运行时来源表](scripts/electron-runtime.mjs)中固定摘要的社区 Electron-for-windows-7 `40.2.0` 压缩包。工作区依赖安装允许 Electron 的 postinstall 准备官方开发可执行文件；打包过程独立选择运行时。准备过程在解压前校验下载文件和缓存文件，并在 Node 模式下核对可执行文件的 Electron 版本、平台和架构。`runtime/bin` 只包含 shell 启动脚本；命令管理进程也使用应用自身的可执行文件及 `ELECTRON_RUN_AS_NODE=1`，包括需要管理员授权的操作。
 
 `win-ia32` 目标拥有独立的构建和更新目录，允许 Windows x64 或 ia32 构建主机，但完整打包会在主运行时准备阶段明确失败：[解释器锁文件](../../scripts/primary-runtime/lock.json)没有 ia32 Python 发行版或 wheel。在这套依赖和原生依赖通过目标主机 smoke 检查之前，不发布 ia32 安装包。选择兼容的 Electron 壳不等于已验证 Windows 7 运行。
 
