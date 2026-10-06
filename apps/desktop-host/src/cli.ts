@@ -11,7 +11,7 @@ import { installOfficeEngineResolution, runtimeArchivePath } from './office-engi
  * @returns Completion of the selected CLI command; profile plugins own their process lifetime.
  */
 export async function runDesktopCli(runtimeDir: string, supportDir: string): Promise<void> {
-  installOfficeEngineResolution(runtimeDir)
+  if (!(process.platform === 'win32' && process.arch === 'ia32')) installOfficeEngineResolution(runtimeDir)
   await runCli({
     manageDesktopProfile: true,
     packageManager: {

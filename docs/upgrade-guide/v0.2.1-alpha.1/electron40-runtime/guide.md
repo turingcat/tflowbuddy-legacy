@@ -11,7 +11,7 @@ English | [中文](guide.zh.md)
 
 Desktop packaging uses official Electron `40.10.6` on macOS and community Electron-for-windows-7 `40.2.0` on Windows instead of the Electron 44 npm distribution. Windows archives come from [Electron-for-windows-7](https://github.com/e3kskoy7wqk/Electron-for-windows-7/releases/tag/v40.2.0), not official Electron releases. Required SHA-256 digests are `ed4ebb022624ae38f764fcfc1dc1ce30fe2145298975d4c90e8d95412deeadea` for x64 `dist.zip` and `0a7560eae08360a6181510e0f20fd4c8f26a471c5118a427958a1d5974b767e5` for ia32 `dist-x86.zip`. Cached archives are verified on every preparation.
 
-RunAsNode remains enabled: dsh, package scripts and command-management workers run through the application executable, not another Node binary. Windows 7 is an end-of-life OS; selecting this community shell is neither a security-support promise nor proof that all bundled dependencies run there. Full `win-ia32` packaging currently fails because no ia32 Python payload is locked. No ia32 installer is released.
+RunAsNode remains enabled: dsh, package scripts and command-management workers run through the application executable, not another Node binary. Windows 7 is an end-of-life OS; selecting this community shell is neither a security-support promise nor proof that all bundled dependencies run there. The `win-ia32` Windows 7 edition omits Python, the LibreOffice engine, Office skills, and inline Office-to-PDF processing. Its remaining JavaScript and native dependencies still require target-host validation.
 
 ## Migration
 

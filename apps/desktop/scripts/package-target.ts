@@ -25,6 +25,7 @@ import { suggestDesktopBuildVersion } from './desktop-build-version-discovery.ts
 import { desktopBuildCommitEnvironment, readDesktopBuildCommit, resolveDesktopBuildCommit } from './desktop-build-commit.mjs'
 import { requireDesktopToolchain } from './desktop-toolchain-preflight.ts'
 import { withMacOSNotarizationProxy } from './macos-notarization-proxy.ts'
+import { desktopOfficeDisabled } from '../../desktop-host/src/desktop-feature-policy.ts'
 
 const APP_ROOT = resolve(import.meta.dirname, '..')
 const REPOSITORY_ROOT = resolve(APP_ROOT, '..', '..')
@@ -445,6 +446,7 @@ export async function packageTarget(
     // builder also receives it through its own argument.
     DSH_DESKTOP_UNSIGNED: invocation.unsigned ? '1' : '0',
   }
+  const officeDisabled = desktopOfficeDisabled(target)
   const downloadEnv = macOSDownloadEnvironment(targetEnv, mac?.downloadProxy)
   // The download environment owns the mirror wiring: `@electron/get` reads its
   // mirror from it, and the primary-runtime builder reads the CPython mirror
@@ -503,7 +505,7 @@ export async function packageTarget(
     buildPaths.packedLandlock,
   ], buildEnv, REPOSITORY_ROOT)
   await execute(['run', 'prepare:runtime', ...(signPrimaryRuntime ? ['--defer-primary-runtime-smoke'] : [])], downloadEnv)
-  if (signPrimaryRuntime) await execute(['run', 'sign:primary-runtime'], electronBuilderEnv)
+  if (signPrimaryRuntime && !officeDisabled) await execute(['run', 'sign:primary-runtime'], electronBuilderEnv)
   await execute(['run', 'prepare:packages'], targetEnv)
   await execute(['run', 'prepare:dsh', ...(signPrimaryRuntime ? ['--defer-runtime-smoke'] : [])], downloadEnv)
   if (signPrimaryRuntime) await execute(['run', 'sign:primary-runtime', '--dsh'], electronBuilderEnv)

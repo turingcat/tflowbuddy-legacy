@@ -20,10 +20,11 @@ interface ReleaseWorkflow {
 const workflow = load(readFileSync(resolve(root, '.github/workflows/release.yml'), 'utf8')) as ReleaseWorkflow
 
 describe('TFlowBuddy desktop release', () => {
-  it('builds only Windows x64 and macOS Apple Silicon installers', () => {
+  it('builds Windows x64, Windows ia32, and macOS Apple Silicon installers', () => {
     expect(Object.keys(workflow.jobs)).toEqual(['desktop', 'publish'])
     expect(workflow.jobs.desktop!.strategy!.matrix.include).toMatchObject([
       { target: 'win-x64', platform: 'win32', arch: 'x64', extension: 'exe' },
+      { target: 'win-ia32', platform: 'win32', arch: 'ia32', extension: 'exe' },
       { target: 'mac-arm64', platform: 'darwin', arch: 'arm64', extension: 'dmg' },
     ])
   })
@@ -66,7 +67,7 @@ describe('TFlowBuddy desktop release', () => {
     expect(publish.needs).toBe('desktop')
     expect(publish.if).toBe("startsWith(github.ref, 'refs/tags/v')")
     const command = publish.steps.find(step => step.name === 'Publish GitHub release')!.run!
-    expect(command).toContain('${#installers[@]}" -ne 2')
+    expect(command).toContain('${#installers[@]}" -ne 3')
     expect(command).toContain('--verify-tag')
     expect(command).not.toContain('--clobber')
   })

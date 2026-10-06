@@ -78,6 +78,13 @@ it('initializes shared storage only after acquiring the preflight stage lock', a
   await packageTarget(parseDesktopPackageInvocation(['win-x64'], 'win32', 'x64'), environment, run)
 })
 
+it('signs the JavaScript runtime but skips the omitted ia32 Python runtime', async () => {
+  const { run, stages } = supervisor()
+  await packageTarget(parseDesktopPackageInvocation(['win-ia32'], 'win32', 'x64'), environment, run)
+  expect(stages).not.toContain('run sign:primary-runtime')
+  expect(stages).toContain('run sign:primary-runtime --dsh')
+})
+
 it.each(['preflight:windows-signing', 'run build:official', 'run sign:primary-runtime', 'run prepare:dsh --defer-runtime-smoke', 'run sign:primary-runtime --dsh',
   'exec tsx scripts/smoke-packaged-runtime.ts',
   'exec electron-builder --config electron-builder.config.mjs --win --x64 --publish never'])

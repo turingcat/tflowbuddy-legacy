@@ -23,6 +23,7 @@ import type { DesktopRuntimeDescriptor } from '../src/runtime-tree.ts'
 export async function smokeDesktopRuntime(
   root: string, node: string, runtime: DesktopRuntimeDescriptor, environment: NodeJS.ProcessEnv, resourcesRuntime: string,
 ): Promise<void> {
+  const officeEnabled = runtime.platform !== 'win32' || runtime.arch !== 'ia32'
   const home = mkdtempSync(join(tmpdir(), 'dsh-desktop-smoke-'))
   const profile = join(home, 'profiles', 'desktop')
   const host = new DesktopHostProcess(node, root, profile, undefined, { ...environment, DSH_HOME: home },
@@ -34,13 +35,16 @@ export async function smokeDesktopRuntime(
     const pluginName = 'desktop-runtime-smoke-plugin'
     const plugin = join(profile, 'node_modules', pluginName)
     mkdirSync(plugin, { recursive: true })
-    const primary = join(resourcesRuntime, 'primary-runtime')
-    const dependencies = workspaceDependencyPaths(primary, await readPrimaryRuntime(primary))
-    await promisify(execFile)(dependencies.python, ['-I', '-B',
-      fileURLToPath(new URL('../tests/fixtures/office-conversion-inputs.py', import.meta.url)), home],
-    { env: environment, timeout: 120_000, windowsHide: true })
-    const inputs = ['docx', 'xlsx', 'pptx'].map(extension => ({ extension,
-      bytes: readFileSync(join(home, `input.${extension}`)).toString('base64') }))
+    const inputs = officeEnabled ? (async () => {
+      const primary = join(resourcesRuntime, 'primary-runtime')
+      const dependencies = workspaceDependencyPaths(primary, await readPrimaryRuntime(primary))
+      return promisify(execFile)(dependencies.python, ['-I', '-B',
+        fileURLToPath(new URL('../tests/fixtures/office-conversion-inputs.py', import.meta.url)), home],
+      { env: environment, timeout: 120_000, windowsHide: true }).then(() =>
+        ['docx', 'xlsx', 'pptx'].map(extension => ({ extension,
+          bytes: readFileSync(join(home, `input.${extension}`)).toString('base64') })))
+    })() : Promise.resolve([] as { extension: string; bytes: string }[])
+    const officeInputs = await inputs
     const cordis = runtime.sharedPackages.find(entry => entry.name === '@deepseek-ai/cordis')
     if (cordis === undefined) throw new Error('desktop runtime: missing shared Cordis package')
     writeFileSync(join(plugin, 'package.json'), JSON.stringify({
@@ -76,7 +80,7 @@ export function apply(ctx) {
         response.end(inspect(error, { depth: 5 }))
       }
     } }))
-  for (const input of ${JSON.stringify(inputs)}) {
+  for (const input of ${JSON.stringify(officeInputs)}) {
     ctx.effect(() => ctx.webServer.register({ kind: 'exact', path: '/desktop-smoke-office/' + input.extension,
       async handler(_request, response) {
         try {
@@ -93,7 +97,9 @@ export function apply(ctx) {
   }
 }
 `)
-    writeFileSync(join(plugin, 'bundle.yml'), '- insert:\n    - id: desktop-runtime-smoke-plugin\n      name: desktop-runtime-smoke-plugin\n      inject: [webServer, officeToPdf, skills]\n')
+    writeFileSync(join(plugin, 'bundle.yml'), officeEnabled
+      ? '- insert:\n    - id: desktop-runtime-smoke-plugin\n      name: desktop-runtime-smoke-plugin\n      inject: [webServer, officeToPdf, skills]\n'
+      : '- insert:\n    - id: desktop-runtime-smoke-plugin\n      name: desktop-runtime-smoke-plugin\n      inject: [webServer]\n')
     const manifest = JSON.parse(readFileSync(join(profile, 'package.json'), 'utf8')) as {
       dependencies: Record<string, string>
       dsh: { profile: { bundles: string[] } }
@@ -114,7 +120,7 @@ export function apply(ctx) {
     }
     const pluginResponse = await fetch(new URL('/desktop-smoke', ready.url), { headers: { cookie } })
     if (await pluginResponse.text() !== 'plugin route ready') throw new Error('desktop runtime: plugin HTTP route failed')
-    for (const { extension } of inputs) {
+    for (const { extension } of officeInputs) {
       const converted = await fetch(new URL(`/desktop-smoke-office/${extension}`, ready.url), {
         headers: { cookie }, signal: AbortSignal.timeout(120_000),
       })
@@ -124,6 +130,10 @@ export function apply(ctx) {
         || !pdf.subarray(-1024).toString().trimEnd().endsWith('%%EOF')) {
         throw new Error(`desktop runtime: invalid ${extension} PDF output`)
       }
+    }
+    if (!officeEnabled) {
+      console.log('desktop runtime: Windows ia32 smoke passed without Python or Office payload')
+      return
     }
     const cliResponse = await fetch(new URL('/desktop-smoke-office-cli', ready.url), {
       headers: { cookie }, signal: AbortSignal.timeout(120_000),

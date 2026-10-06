@@ -1,4 +1,5 @@
 /** Desktop-only omissions from already installed production npm packages. */
+import { desktopOfficePackageDisabled } from '../../desktop-host/src/desktop-feature-policy.ts'
 
 /**
  * Identify build and diagnostic files omitted from the immutable Desktop runtime.
@@ -10,7 +11,7 @@
  * @returns Omission reason, or undefined when the entry must be copied.
  */
 export function desktopRuntimeFileExclusion(
-  path: string, target: { platform: NodeJS.Platform; arch: string }, officeEngine: string,
+  path: string, target: { platform: NodeJS.Platform; arch: string }, officeEngine?: string,
 ): string | undefined {
   const parts = path.split(/[\\/]/u)
   if (parts.some(part => ['.bin', '.pnpm', '.modules.yaml', '.pnpm-workspace-state-v1.json'].includes(part))) {
@@ -24,8 +25,11 @@ export function desktopRuntimeFileExclusion(
   const nameParts = packageParts[0]?.startsWith('@') ? 2 : 1
   const name = packageParts.slice(0, nameParts).join('/')
   const entry = packageParts.slice(nameParts).join('/')
+  if (desktopOfficePackageDisabled(name, target)) {
+    return 'Windows ia32 Office payload'
+  }
   if (name.startsWith('@deepseek-ai/libreoffice-kit-')) {
-    if (name !== `@deepseek-ai/libreoffice-kit-${officeEngine}`) return 'LibreOffice other platform'
+    if (officeEngine === undefined || name !== `@deepseek-ai/libreoffice-kit-${officeEngine}`) return 'LibreOffice other platform'
   }
   if (name === 'fs-ext' && /^build\/(?:Release|Debug)\/(?:obj(?:\/|$)|fs_ext\.(?:exp|lib|pdb|iobj|ipdb)$)/u.test(entry)) {
     return 'fs-ext compiler output'

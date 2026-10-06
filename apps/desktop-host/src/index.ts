@@ -8,7 +8,7 @@ import type {} from '@deepseek-ai/dsh-client-connection'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import type {} from '@deepseek-ai/dsh-deepseek-account'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
-import * as desktopOffice from './office.ts'
+import { desktopOfficeDisabled } from './desktop-feature-policy.ts'
 
 import { installDesktopUpdateTaskControl } from './update-tasks.ts'
 import { installPlatformSessionPublisher } from './platform-session.ts'
@@ -21,7 +21,8 @@ const EDITION_OVERLAY = fileURLToPath(new URL('../edition.cordis.patch.yml', imp
 async function main(): Promise<void> {
   const runtimeDir = process.argv[2] as string
   const projectDir = process.argv[3] as string
-  installOfficeEngineResolution(runtimeDir)
+  const officeDisabled = desktopOfficeDisabled({ platform: process.platform, arch: process.arch })
+  if (!officeDisabled) installOfficeEngineResolution(runtimeDir)
   const installAnchor = join(runtimeDir, 'node_modules', '@deepseek-ai', 'dsh', 'package.json')
   const profile = loadProfileDirectory('dsh', projectDir, installAnchor)
   const application = runProfile({
@@ -74,13 +75,16 @@ async function main(): Promise<void> {
   process.once('disconnect', () => { void stop() })
   const { ctx } = await application
   control.updateTasks = installDesktopUpdateTaskControl(ctx)
-  await ctx.plugin(desktopOffice, {
-    runtimeDir,
-    source: process.argv[4] ?? join(runtimeDir, '..', 'runtime', 'primary-runtime'),
-    root: join(resolveDshHome(), 'dsh-runtimes', 'dsh-primary-runtime'),
-    node: writeElectronNodeLauncher(join(resolveDshHome(), 'dsh-runtimes', 'dsh-electron-node'), process.execPath),
-    ...(process.argv[5] === undefined ? {} : { pnpm: process.argv[5] }),
-  })
+  if (!officeDisabled) {
+    const desktopOffice = await import('./office.ts')
+    await ctx.plugin(desktopOffice, {
+      runtimeDir,
+      source: process.argv[4] ?? join(runtimeDir, '..', 'runtime', 'primary-runtime'),
+      root: join(resolveDshHome(), 'dsh-runtimes', 'dsh-primary-runtime'),
+      node: writeElectronNodeLauncher(join(resolveDshHome(), 'dsh-runtimes', 'dsh-electron-node'), process.execPath),
+      ...(process.argv[5] === undefined ? {} : { pnpm: process.argv[5] }),
+    })
+  }
   installPlatformSessionPublisher(ctx, (session) => {
     if (process.connected) process.send?.({ type: 'platform-session', session })
   })

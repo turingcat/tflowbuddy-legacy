@@ -7,6 +7,14 @@ import { verifyDesktopRuntime, writeDesktopRuntime } from '../src/runtime-tree.t
 import { runtimeFixture } from './runtime-fixture.ts'
 
 const windows = { platform: 'win32' as const, arch: 'x64' }
+const windows32 = { platform: 'win32' as const, arch: 'ia32' }
+
+it('omits Office packages from the Windows ia32 runtime', () => {
+  expect(desktopRuntimeFileExclusion('@deepseek-ai/dsh-office-to-pdf/package.json', windows32)).toBeDefined()
+  expect(desktopRuntimeFileExclusion('@deepseek-ai/dsh-skill-office/package.json', windows32)).toBeDefined()
+  expect(desktopRuntimeFileExclusion('@deepseek-ai/libreoffice-kit/package.json', windows32)).toBeDefined()
+  expect(desktopRuntimeFileExclusion('@deepseek-ai/dsh-tool-fs/package.json', windows32)).toBeUndefined()
+})
 
 it('omits development artifacts while preserving executable modules, assets and license files', async () => {
   const root = mkdtempSync(join(tmpdir(), 'desktop-file-policy-'))

@@ -6,11 +6,11 @@ import { join } from 'node:path'
 import { expect, it, vi } from 'vitest'
 import { preparePrimaryRuntime, smokePrimaryRuntime } from '../scripts/prepare-primary-runtime.ts'
 
-it('rejects ia32 before downloading a primary runtime with no locked interpreter', async () => {
+it('skips the primary runtime for the Windows ia32 edition', async () => {
   vi.stubEnv('DSH_DESKTOP_TARGET_PLATFORM', 'win32')
   vi.stubEnv('DSH_DESKTOP_TARGET_ARCH', 'ia32')
   try {
-    await expect(preparePrimaryRuntime()).rejects.toThrow('primary runtime: unsupported target win-ia32')
+    await expect(preparePrimaryRuntime()).resolves.toBeUndefined()
   } finally { vi.unstubAllEnvs() }
 })
 

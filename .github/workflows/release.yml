@@ -30,6 +30,12 @@ jobs:
             arch: x64
             extension: exe
             shell: pwsh
+          - target: win-ia32
+            runner: windows-2025
+            platform: win32
+            arch: ia32
+            extension: exe
+            shell: pwsh
           - target: mac-arm64
             runner: macos-15
             platform: darwin
@@ -62,7 +68,7 @@ jobs:
             if (process.env.GITHUB_REF_TYPE === "tag" && process.env.GITHUB_REF_NAME !== `v${version}`) {
               throw new Error(`Release tag must be v${version}`);
             }
-            if (process.platform !== process.env.TARGET_PLATFORM || process.arch !== process.env.TARGET_ARCH) {
+            if (process.platform !== process.env.TARGET_PLATFORM || (process.env.TARGET_ARCH !== "ia32" && process.arch !== process.env.TARGET_ARCH)) {
               throw new Error("Build host does not match the desktop target");
             }
             const source = resolveElectronRuntimeSource(process.env.TARGET_PLATFORM, process.env.TARGET_ARCH);
@@ -111,8 +117,8 @@ jobs:
         run: |
           shopt -s nullglob
           installers=(installers/tflowbuddy-*.exe installers/tflowbuddy-*.dmg)
-          if [ "${#installers[@]}" -ne 2 ]; then
-            echo 'Expected one Windows x64 installer and one macOS ARM64 disk image' >&2
+          if [ "${#installers[@]}" -ne 3 ]; then
+            echo 'Expected Windows x64, Windows ia32, and macOS ARM64 installers' >&2
             exit 1
           fi
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then

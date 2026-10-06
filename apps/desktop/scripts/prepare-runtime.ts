@@ -15,6 +15,11 @@ import { prepareCommandLink } from './prepare-command-link.ts'
 const BUILD_PATHS = resolveDesktopTargetBuildPaths()
 const RUNTIME_ROOT = BUILD_PATHS.runtime
 
+/** Whether the selected target carries the Python/Office payload. */
+export function shouldPreparePrimaryRuntime(target: { platform: string; arch: string }): boolean {
+  return !(target.platform === 'win32' && target.arch === 'ia32')
+}
+
 function preparePnpm(): string {
   const require = createRequire(import.meta.url)
   const manifestPath = require.resolve('pnpm')
@@ -56,8 +61,10 @@ async function main(): Promise<void> {
   if (macosMinimumVersion !== undefined && arch !== 'ia32') prepareCommandLink(join(RUNTIME_ROOT, 'cli'), arch, macosMinimumVersion)
   cpSync(join(import.meta.dirname, '..', 'lib', 'command-manager-entry.js'), join(RUNTIME_ROOT, 'cli', 'command-manager.js'))
   cpSync(join(import.meta.dirname, 'command-path.ps1'), join(RUNTIME_ROOT, 'cli', 'command-path.ps1'))
-  await packagingStep(process.env.DSH_DESKTOP_PACKAGING_RUN_DIR, 'prepare:primary-runtime',
-    () => preparePrimaryRuntime({ deferSmoke: values['defer-primary-runtime-smoke'] }))
+  if (shouldPreparePrimaryRuntime({ platform, arch })) {
+    await packagingStep(process.env.DSH_DESKTOP_PACKAGING_RUN_DIR, 'prepare:primary-runtime',
+      () => preparePrimaryRuntime({ deferSmoke: values['defer-primary-runtime-smoke'] }))
+  }
 }
 
 await main()

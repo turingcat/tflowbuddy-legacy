@@ -14,3 +14,7 @@
 # The direct DeepSeek adapter serves a provider and models this account cannot reach.
 - id: llm-deepseek
   disabled: true
+
+# Windows ia32 omits Python and the bundled Office conversion engine.
+- id: office-to-pdf
+  disabled: !!js "process.platform === 'win32' && process.arch === 'ia32'"

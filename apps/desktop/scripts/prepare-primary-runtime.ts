@@ -14,9 +14,7 @@ import { scrubWindowsSigningEnvironment } from './windows-sign.mjs'
  */
 export async function preparePrimaryRuntime(options: { deferSmoke?: boolean } = {}): Promise<void> {
   const target = resolveDesktopBuildTarget()
-  if (target === 'win-ia32') {
-    throw new Error('primary runtime: unsupported target win-ia32; no locked ia32 Python interpreter and wheels')
-  }
+  if (target === 'win-ia32') return
   const paths = resolveDesktopTargetBuildPaths()
   const { version } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { version: string }
   await preparePayload({ target, output: paths.runtime, cache: paths.downloads, version, compact: true })
