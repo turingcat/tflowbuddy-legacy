@@ -155,8 +155,14 @@ function checkHtml() {
 }
 
 try {
-  const builtin = requireRuntime('node-addon-require-builtin')
-  assert.equal(typeof builtin.requireBuiltin('internal/modules/esm/loader').getOrInitializeCascadedLoader, 'function')
+  let loader = null
+  try {
+    const builtin = requireRuntime('node-addon-require-builtin')
+    loader = builtin.requireBuiltin('internal/modules/esm/loader')
+  } catch (_error) {
+    loader = requireRuntime('internal/modules/esm/loader')
+  }
+  assert.equal(typeof loader?.getOrInitializeCascadedLoader, 'function')
   checkPnpm()
   checkKoffi()
   await checkSharp()

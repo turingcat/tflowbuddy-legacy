@@ -1,5 +1,5 @@
-/** Official macOS Electron release. */
-export const ELECTRON_VERSION: '40.10.6'
+/** Official macOS and Windows x64 Electron release. */
+export const ELECTRON_VERSION: '44.0.0'
 
 /** Digest-locked Windows community release. */
 export const WINDOWS_COMMUNITY_ELECTRON: {
